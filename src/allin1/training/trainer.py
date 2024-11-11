@@ -73,9 +73,10 @@ class AllInOneTrainer(LightningModule):
                     print(f'=> The LR is decayed from {old_lr} to {new_lr}. '
                           f'Loading the best model: {self.cfg.eval_metric}={self.trainer.checkpoint_callback.best_model_score}')
                     
-                    # Load checkpoint as a temporary instance
-                    best_model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-                    self.model.load_state_dict(best_model.model.state_dict())
+                    # Load checkpoint as a new model instance
+                    best_model_path = self.trainer.checkpoint_callback.best_model_path
+                    model = AllInOneTrainer.load_from_checkpoint(best_model_path, cfg=self.cfg)
+                    return model  # If you need to continue using the best model instance
             elif self.current_epoch + 1 <= self.cfg.warmup_epochs:
                 self.scheduler.step(epoch=self.current_epoch + 1)
         else:
@@ -300,10 +301,11 @@ class AllInOneTrainer(LightningModule):
         if self.trainer.is_global_zero and self.trainer.checkpoint_callback.best_model_path:
             print('=> Loading best model...')
             
-            # Load checkpoint as a temporary instance
-            best_model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-            self.model.load_state_dict(best_model.model.state_dict())
+            # Load the best model as a new instance
+            best_model_path = self.trainer.checkpoint_callback.best_model_path
+            model = AllInOneTrainer.load_from_checkpoint(best_model_path, cfg=self.cfg)
             print('=> Loaded best model.')
+            return model  # Use the newly loaded model if needed
 
 
 def prefix_dict(d: Dict, prefix: str):
