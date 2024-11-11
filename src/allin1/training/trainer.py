@@ -72,7 +72,8 @@ class AllInOneTrainer(LightningModule):
         if new_lr < old_lr:
           print(f'=> The LR is decayed from {old_lr} to {new_lr}. '
                 f'Loading the best model: {self.cfg.eval_metric}={self.trainer.checkpoint_callback.best_model_score}')
-          self.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+          # self.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+          AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
       elif self.current_epoch + 1 <= self.cfg.warmup_epochs:
         self.scheduler.step(epoch=self.current_epoch + 1)
     else:
