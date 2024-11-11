@@ -57,27 +57,29 @@ class AllInOneTrainer(LightningModule):
     }
 
   def on_train_epoch_end(self) -> None:
-    if self.cfg.sanity_check:
-      return
+        if self.cfg.sanity_check:
+            return
 
-    if self.cfg.sched == 'plateau':
-      if (self.current_epoch + 1) % self.cfg.validation_interval_epochs == 0:
-        optimizer = self.trainer.optimizers[0]
-        old_lr = optimizer.param_groups[0]['lr']
+        if self.cfg.sched == 'plateau':
+            if (self.current_epoch + 1) % self.cfg.validation_interval_epochs == 0:
+                optimizer = self.trainer.optimizers[0]
+                old_lr = optimizer.param_groups[0]['lr']
 
-        metric = self.trainer.callback_metrics[self.cfg.eval_metric]
-        self.scheduler.step(epoch=self.current_epoch + 1, metric=metric)
+                metric = self.trainer.callback_metrics[self.cfg.eval_metric]
+                self.scheduler.step(epoch=self.current_epoch + 1, metric=metric)
 
-        new_lr = optimizer.param_groups[0]['lr']
-        if new_lr < old_lr:
-          print(f'=> The LR is decayed from {old_lr} to {new_lr}. '
-                f'Loading the best model: {self.cfg.eval_metric}={self.trainer.checkpoint_callback.best_model_score}')
-          # self.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-          AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-      elif self.current_epoch + 1 <= self.cfg.warmup_epochs:
-        self.scheduler.step(epoch=self.current_epoch + 1)
-    else:
-      self.scheduler.step(epoch=self.current_epoch + 1)
+                new_lr = optimizer.param_groups[0]['lr']
+                if new_lr < old_lr:
+                    print(f'=> The LR is decayed from {old_lr} to {new_lr}. '
+                          f'Loading the best model: {self.cfg.eval_metric}={self.trainer.checkpoint_callback.best_model_score}')
+                    
+                    # Load checkpoint as a temporary instance
+                    best_model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+                    self.model.load_state_dict(best_model.model.state_dict())
+            elif self.current_epoch + 1 <= self.cfg.warmup_epochs:
+                self.scheduler.step(epoch=self.current_epoch + 1)
+        else:
+            self.scheduler.step(epoch=self.current_epoch + 1)
 
   def training_step(self, batch, batch_idx):
     batch_size = batch['spec'].shape[0]
@@ -294,12 +296,14 @@ class AllInOneTrainer(LightningModule):
     return times
 
   def on_fit_end(self):
-    print('=> Fit ended.')
-    if self.trainer.is_global_zero and self.trainer.checkpoint_callback.best_model_path:
-      print('=> Loading best model...')
-      # self.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-      AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-      print('=> Loaded best model.')
+        print('=> Fit ended.')
+        if self.trainer.is_global_zero and self.trainer.checkpoint_callback.best_model_path:
+            print('=> Loading best model...')
+            
+            # Load checkpoint as a temporary instance
+            best_model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+            self.model.load_state_dict(best_model.model.state_dict())
+            print('=> Loaded best model.')
 
 
 def prefix_dict(d: Dict, prefix: str):
