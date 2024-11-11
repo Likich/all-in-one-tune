@@ -297,7 +297,8 @@ class AllInOneTrainer(LightningModule):
     print('=> Fit ended.')
     if self.trainer.is_global_zero and self.trainer.checkpoint_callback.best_model_path:
       print('=> Loading best model...')
-      self.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+      # self.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+      AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
       print('=> Loaded best model.')
 
 
