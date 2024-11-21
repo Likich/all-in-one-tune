@@ -105,21 +105,18 @@ def compute_postprocessed_scores(
   cfg: Config,
   prefix: str = '',
 ):
-  all_scores: List[Mapping[str, float]] = []
+  List[Mapping[str, float]] = []
 
-  with Pool(os.cpu_count() // 2) as pool:
-    fn = partial(
-      compute_postprocessed_scores_step,
-      cfg=cfg,
-    )
-    if cfg.debug:
-      iterator = map(fn, predict_outputs)
-    else:
-      iterator = pool.imap(fn, predict_outputs)
-    iterator = tqdm(iterator, total=len(predict_outputs), desc='Postprocessing...')
+  fn = partial(
+    compute_postprocessed_scores_step,      
+    cfg=cfg,
+  )
+  
+  iterator = map(fn, predict_outputs)
+  iterator = tqdm(iterator, total=len(predict_outputs), desc='Postprocessing...')
 
-    for result in iterator:
-      all_scores.append(result)
+  for result in iterator:
+    all_scores.append(result)
 
   avg_scores = {
     f'{prefix}{k}': np.mean([scores[k] for scores in all_scores])
