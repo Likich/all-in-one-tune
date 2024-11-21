@@ -105,7 +105,7 @@ def compute_postprocessed_scores(
   cfg: Config,
   prefix: str = '',
 ):
-  List[Mapping[str, float]] = []
+  all_scores = List[Mapping[str, float]]
 
   fn = partial(
     compute_postprocessed_scores_step,      
