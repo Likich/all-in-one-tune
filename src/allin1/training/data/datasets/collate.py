@@ -35,6 +35,7 @@ def collate_fn(raw_batch):
       else:
         raise ValueError(f'Unknown key: {key}')
     batch.append(data)
+    print(batch)
   
   batch = torch.utils.data.default_collate(batch)
   batch = {**batch, **variable_length_batch}
