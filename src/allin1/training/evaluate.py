@@ -189,6 +189,10 @@ def compute_postprocessed_scores_step(
   pred_boundaries = np.array([[p.start, p.end] for p in pred_functional])
   true_boundaries = np.stack([true_boundary_times[:-1], true_boundary_times[1:]]).T
 
+  print(pred_labels, 'pred_labels')
+  print(pred_boundaries, 'pred_boundaries')
+  print(true_boundaries, 'true_boundaries')
+
   scores_functional = mir_eval.segment.evaluate(
     true_boundaries, true_labels, pred_boundaries, pred_labels,
     trim=False
