@@ -189,12 +189,12 @@ def compute_postprocessed_scores_step(
     print(f"Predicted intervals after filtering: {pred_boundaries}")
     print(f"Predicted labels after filtering: {pred_labels}")
 
-    scores_functional = mir_eval.segment.evaluate(
-        true_intervals, true_labels, pred_boundaries, pred_labels, trim=False
-    )
-    scores_functional = {f'segment/{k}': v for k, v in scores_functional.items()}
+    # scores_functional = mir_eval.segment.evaluate(
+    #     true_intervals, true_labels, pred_boundaries, pred_labels, trim=False
+    # )
+    # scores_functional = {f'segment/{k}': v for k, v in scores_functional.items()}
 
-    scores = {**scores_functional, **scores_metrical}
+    scores = {pred_boundaries}
 
     return scores
 
