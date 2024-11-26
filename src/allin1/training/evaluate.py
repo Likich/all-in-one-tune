@@ -151,33 +151,36 @@ def compute_postprocessed_scores_step(
         'downbeat/amlt': eval_downbeat.amlt,
     }
 
-    # Process ground truths
-    true_labels = inputs['true_function_list'][0]
-    true_boundary_times = inputs['true_section_times'][0]
-    
+    # Process ground truths.
+    true_labels = np.array(inputs['true_function_list'][0])
+    true_boundary_times = np.array(inputs['true_section_times'][0])
+
     # Ensure no negative boundaries
     true_boundary_times = np.maximum(true_boundary_times, 0)
 
-    # Remove intervals where start >= end
-    duration = inputs['spec'].shape[2] * cfg.hop_size / cfg.sample_rate
+    # Compute intervals
     true_intervals = np.stack([true_boundary_times[:-1], true_boundary_times[1:]]).T
-    valid_indices = true_intervals[:, 1] > true_intervals[:, 0]
-    true_intervals = true_intervals[valid_indices]
-    true_labels = np.array(true_labels)[valid_indices]
+
+    # Filter invalid intervals (start >= end)
+    valid_mask = true_intervals[:, 1] > true_intervals[:, 0]
+    true_intervals = true_intervals[valid_mask]
+    true_labels = true_labels[valid_mask]  # Ensure labels match the filtered intervals
 
     # Ensure intervals fit within the audio duration
+    duration = inputs['spec'].shape[2] * cfg.hop_size / cfg.sample_rate
     true_intervals[:, 1] = np.minimum(true_intervals[:, 1], duration)
-    
+
     if len(true_intervals) == 0:
-        # If no valid intervals remain, return empty scores
+        # Handle case where all intervals are invalid
         return {**scores_metrical, **{f'segment/{k}': 0 for k in mir_eval.segment.metrics.keys()}}
 
     pred_labels = [HARMONIX_LABELS.index(s.label) for s in pred_functional]
     pred_boundaries = np.array([[p.start, p.end] for p in pred_functional])
 
     # Remove invalid predicted intervals
-    pred_boundaries = pred_boundaries[pred_boundaries[:, 1] > pred_boundaries[:, 0]]
-    pred_labels = np.array(pred_labels)[pred_boundaries[:, 1] > pred_boundaries[:, 0]]
+    pred_valid_mask = pred_boundaries[:, 1] > pred_boundaries[:, 0]
+    pred_boundaries = pred_boundaries[pred_valid_mask]
+    pred_labels = np.array(pred_labels)[pred_valid_mask]
 
     scores_functional = mir_eval.segment.evaluate(
         true_intervals, true_labels, pred_boundaries, pred_labels, trim=False
