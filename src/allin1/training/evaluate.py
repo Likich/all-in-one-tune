@@ -166,6 +166,10 @@ def compute_postprocessed_scores_step(
     true_intervals = true_intervals[valid_mask]
     true_labels = true_labels[valid_mask]  # Ensure labels match the filtered intervals
 
+      # Debug: Print true intervals and labels after filtering
+    print(f"True intervals after filtering: {true_intervals}")
+    print(f"True labels after filtering: {true_labels}")
+
     # Ensure intervals fit within the audio duration
     duration = inputs['spec'].shape[2] * cfg.hop_size / cfg.sample_rate
     true_intervals[:, 1] = np.minimum(true_intervals[:, 1], duration)
@@ -181,6 +185,9 @@ def compute_postprocessed_scores_step(
     pred_valid_mask = pred_boundaries[:, 1] > pred_boundaries[:, 0]
     pred_boundaries = pred_boundaries[pred_valid_mask]
     pred_labels = np.array(pred_labels)[pred_valid_mask]
+      # Debug: Print predicted intervals and labels after filtering
+    print(f"Predicted intervals after filtering: {pred_boundaries}")
+    print(f"Predicted labels after filtering: {pred_labels}")
 
     scores_functional = mir_eval.segment.evaluate(
         true_intervals, true_labels, pred_boundaries, pred_labels, trim=False
