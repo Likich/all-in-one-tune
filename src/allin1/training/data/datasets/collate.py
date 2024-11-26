@@ -38,5 +38,6 @@ def collate_fn(raw_batch):
   
   batch = torch.utils.data.default_collate(batch)
   batch = {**batch, **variable_length_batch}
+  print(batch)
   
   return batch
