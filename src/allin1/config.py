@@ -4,8 +4,8 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
 
 HARMONIX_LABELS = [
-  'song_start',
-  'song_end'
+  'start',
+  'end'
 ]
 
 
