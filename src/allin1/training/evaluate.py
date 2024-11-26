@@ -101,29 +101,45 @@ def evaluate(
 
 
 def compute_postprocessed_scores(
-  predict_outputs: List[Tuple[Dict, AllInOneOutput, AllInOnePrediction]],
-  cfg: Config,
-  prefix: str = '',
+    predict_outputs: List[Tuple[Dict, AllInOneOutput, AllInOnePrediction]],
+    cfg: Config,
+    prefix: str = '',
 ):
-  all_scores = []
+    all_scores = []
 
-  fn = partial(
-    compute_postprocessed_scores_step,      
-    cfg=cfg,
-  )
-  
-  iterator = map(fn, predict_outputs)
-  iterator = tqdm(iterator, total=len(predict_outputs), desc='Postprocessing...')
+    # Partial function for the step processing
+    fn = partial(
+        compute_postprocessed_scores_step,
+        cfg=cfg,
+    )
 
-  for result in iterator:
-    all_scores.append(result)
+    # Map the step function across the predict outputs
+    iterator = map(fn, predict_outputs)
+    iterator = tqdm(iterator, total=len(predict_outputs), desc='Postprocessing...')
 
-  avg_scores = {
-    f'{prefix}{k}': np.mean([scores[k] for scores in all_scores])
-    for k in all_scores[0].keys()
-  }
+    # Process each result and check for errors
+    for idx, result in enumerate(iterator):
+        if result is None or not isinstance(result, dict):
+            print(f"Error in compute_postprocessed_scores_step at index {idx}. Result: {result}")
+            continue
+        all_scores.append(result)
 
-  return avg_scores
+    # Ensure all_scores is not empty
+    if len(all_scores) == 0:
+        raise ValueError("No valid scores generated. Check the predict_outputs and step function.")
+
+    # Debug: Print shapes of all_scores
+    print(f"Collected scores from all steps: {len(all_scores)}")
+    print(f"Keys in scores: {list(all_scores[0].keys())}")
+
+    # Compute average scores
+    avg_scores = {
+        f'{prefix}{k}': np.mean([scores[k] for scores in all_scores if k in scores])
+        for k in all_scores[0].keys()
+    }
+
+    return avg_scores
+
 
 
 def compute_postprocessed_scores_step(
