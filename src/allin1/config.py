@@ -4,9 +4,10 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
 
 HARMONIX_LABELS = [
-  'song_start',
+  'start',
   'end',
-  'song_end'
+  'song_end',
+  'song_start'
 ]
 
 
@@ -36,7 +37,7 @@ class HarmonixConfig(DataConfig):
 
   demixed: bool = True
   num_instruments: int = 4
-  num_labels: int = 10
+  num_labels: int = 4
 
   path_base_dir: str = './data/harmonix/'
   path_track_dir: str = './data/harmonix/tracks/'
