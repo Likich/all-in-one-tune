@@ -53,13 +53,13 @@ def collate_fn(raw_batch):
         batch.append(data)
 
     # Debugging: Check the batch structure
-    print("Before collate:", batch)
+    # print("Before collate:", batch)
     
     # Ensure the batch is compatible with `default_collate`
     batch = torch.utils.data.default_collate(batch)
     batch = {**batch, **variable_length_batch}  # Merge variable-length batch data
     
     # Debugging: Check the final collated batch
-    print("After collate:", batch)
+    # print("After collate:", batch)
     
     return batch
