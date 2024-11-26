@@ -13,7 +13,7 @@ HARMONIX_LABELS = [
   'inst',
   'solo',
   'verse',
-  'chorus',
+  'chorus'
 ]
 
 
