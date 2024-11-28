@@ -169,12 +169,12 @@ def compute_postprocessed_scores_step(
 
     # Process predicted intervals and labels
     pred_boundaries = np.array([[p.start, p.end] for p in pred_functional])
-    pred_labels = [HARMONIX_LABELS.index(s.label) for s in pred_functional]
+    pred_labels = np.array([HARMONIX_LABELS.index(s.label) for s in pred_functional])
 
     # Clean predicted intervals (remove repeating intervals where start == end)
     valid_pred_mask = pred_boundaries[:, 0] != pred_boundaries[:, 1]
     pred_boundaries = pred_boundaries[valid_pred_mask]
-    pred_labels = np.array(pred_labels)[valid_pred_mask]
+    pred_labels = pred_labels[valid_pred_mask]  # Ensure alignment
 
     # Debugging: Print filtered predicted intervals
     print(f"Filtered pred intervals: {pred_boundaries}")
@@ -190,11 +190,16 @@ def compute_postprocessed_scores_step(
     # Clean ground truth intervals (remove repeating intervals where start == end)
     valid_true_mask = true_intervals[:, 0] != true_intervals[:, 1]
     true_intervals = true_intervals[valid_true_mask]
-    true_labels = true_labels[valid_true_mask]
+    true_labels = true_labels[valid_true_mask]  # Ensure alignment
 
     # Debugging: Print filtered ground truth intervals
     print(f"Filtered true intervals: {true_intervals}")
     print(f"Filtered true labels: {true_labels}")
+
+    # Handle cases where intervals are empty after filtering
+    if len(pred_boundaries) == 0 or len(true_intervals) == 0:
+        print("Warning: Empty intervals detected after filtering. Returning default scores.")
+        return {**scores_metrical, **{f'segment/{k}': 0 for k in mir_eval.segment.metrics.keys()}}
 
     # Call mir_eval.segment.evaluate with cleaned intervals
     scores_functional = mir_eval.segment.evaluate(
@@ -205,6 +210,7 @@ def compute_postprocessed_scores_step(
     scores = {**scores_functional, **scores_metrical}
 
     return scores
+
 
 
 
