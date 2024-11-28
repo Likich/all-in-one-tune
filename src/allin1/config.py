@@ -33,18 +33,18 @@ class DataConfig:
 
 @dataclass
 class HarmonixConfig(DataConfig):
-  name: str = 'harmonix'
+  name: str = 'files'
 
   demixed: bool = True
   num_instruments: int = 4
   num_labels: int = 4
 
-  path_base_dir: str = './data/harmonix/'
-  path_track_dir: str = './data/harmonix/tracks/'
-  path_demix_dir: str = './data/harmonix/demix/'
-  path_feature_dir: str = './data/harmonix/features/'
-  path_no_demixed_feature_dir: str = './data/harmonix/features_no_demixed/'
-  path_metadata: str = './data/harmonix/metadata.csv'
+  path_base_dir: str = './files/'
+  path_track_dir: str = './files/tracks/'
+  path_demix_dir: str = './files/demix/'
+  path_feature_dir: str = './files/features/'
+  path_no_demixed_feature_dir: str = './files/features_no_demixed/'
+  path_metadata: str = './files/metadata.csv'
 
   duration_min: int = 76
   duration_max: int = 660
@@ -52,7 +52,7 @@ class HarmonixConfig(DataConfig):
 
 defaults = [
   '_self_',
-  {'data': 'harmonix'},
+  {'data': 'files'},
 ]
 
 
