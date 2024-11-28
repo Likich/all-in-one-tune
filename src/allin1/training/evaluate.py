@@ -143,73 +143,62 @@ def compute_postprocessed_scores(
 
 
 def compute_postprocessed_scores_step(
-    predict_output: Tuple[Dict, AllInOneOutput, AllInOnePrediction],
-    cfg: Config,
+  predict_output: Tuple[Dict, AllInOneOutput, AllInOnePrediction],
+  cfg: Config,
 ) -> Mapping[str, float]:
-    inputs, outputs, preds = predict_output
+  inputs, outputs, preds = predict_output
 
-    pred_functional = postprocess_functional_structure(outputs, cfg)
-    pred_metrical = postprocess_metrical_structure(outputs, cfg)
+  pred_functional = postprocess_functional_structure(outputs, cfg)
+  pred_metrical = postprocess_metrical_structure(outputs, cfg)
 
-    eval_beat = BeatEvaluation(pred_metrical['beats'], inputs['true_beat_times'][0])
-    eval_downbeat = BeatEvaluation(pred_metrical['downbeats'], inputs['true_downbeat_times'][0])
+  eval_beat = BeatEvaluation(pred_metrical['beats'], inputs['true_beat_times'][0])
+  eval_downbeat = BeatEvaluation(pred_metrical['downbeats'], inputs['true_downbeat_times'][0])
 
-    scores_metrical = {
-        'beat/f1': eval_beat.fmeasure,
-        'beat/precision': eval_beat.precision,
-        'beat/recall': eval_beat.recall,
-        'beat/cmlt': eval_beat.cmlt,
-        'beat/amlt': eval_beat.amlt,
-        'downbeat/f1': eval_downbeat.fmeasure,
-        'downbeat/precision': eval_downbeat.precision,
-        'downbeat/recall': eval_downbeat.recall,
-        'downbeat/cmlt': eval_downbeat.cmlt,
-        'downbeat/amlt': eval_downbeat.amlt,
-    }
+  scores_metrical = {
+    'beat/f1': eval_beat.fmeasure,
+    'beat/precision': eval_beat.precision,
+    'beat/recall': eval_beat.recall,
+    'beat/cmlt': eval_beat.cmlt,
+    'beat/amlt': eval_beat.amlt,
+    'downbeat/f1': eval_downbeat.fmeasure,
+    'downbeat/precision': eval_downbeat.precision,
+    'downbeat/recall': eval_downbeat.recall,
+    'downbeat/cmlt': eval_downbeat.cmlt,
+    'downbeat/amlt': eval_downbeat.amlt,
+  }
 
-    # Process predicted intervals and labels
-    pred_boundaries = np.array([[p.start, p.end] for p in pred_functional])
-    pred_labels = np.array([HARMONIX_LABELS.index(s.label) for s in pred_functional])
+  # Process ground truths.
+  true_labels = inputs['true_function_list'][0]
+  true_boundary_times = inputs['true_section_times'][0]
+  # Some first positions are negative.
+  true_boundary_times = np.maximum(true_boundary_times, 0)
+  # Some last positions are out of audio length.
+  duration = inputs['spec'].shape[2] * cfg.hop_size / cfg.sample_rate
+  if true_boundary_times[-1] >= duration:
+    true_boundary_times = true_boundary_times[:-1]
+    true_labels = true_labels[:-1]
+  if true_boundary_times[0] == 0:
+    true_labels = true_labels[1:]  # there is no "start", beginning with "intro"
+  else:
+    # Else, insert "start" boundary at the beginning (0.0).
+    true_boundary_times = np.insert(true_boundary_times, 0, 0.0)
+  if true_boundary_times[-1] != duration:
+    true_boundary_times = np.append(true_boundary_times, duration)
 
-    # Clean predicted intervals (remove repeating intervals where start == end)
-    valid_pred_mask = pred_boundaries[:, 0] != pred_boundaries[:, 1]
-    pred_boundaries = pred_boundaries[valid_pred_mask]
-    pred_labels = pred_labels[valid_pred_mask]  # Ensure alignment
+  pred_labels = [HARMONIX_LABELS.index(s.label) for s in pred_functional]
+  pred_boundaries = np.array([[p.start, p.end] for p in pred_functional])
+  true_boundaries = np.stack([true_boundary_times[:-1], true_boundary_times[1:]]).T
 
-    # Debugging: Print filtered predicted intervals
-    print(f"Filtered pred intervals: {pred_boundaries}")
-    print(f"Filtered pred labels: {pred_labels}")
+  scores_functional = mir_eval.segment.evaluate(
+    true_boundaries, true_labels, pred_boundaries, pred_labels,
+    trim=False
+  )
+  scores_functional = {f'segment/{k}': v for k, v in scores_functional.items()}
 
-    # Process ground truth intervals and labels
-    true_labels = np.array(inputs['true_function_list'][0])
-    true_boundary_times = np.array(inputs['true_section_times'][0])
+  scores = {**scores_functional, **scores_metrical}
 
-    # Convert to intervals
-    true_intervals = np.stack([true_boundary_times[:-1], true_boundary_times[1:]]).T
+  return scores
 
-    # Clean ground truth intervals (remove repeating intervals where start == end)
-    valid_true_mask = true_intervals[:, 0] != true_intervals[:, 1]
-    true_intervals = true_intervals[valid_true_mask]
-    true_labels = true_labels[valid_true_mask]  # Ensure alignment
-
-    # Debugging: Print filtered ground truth intervals
-    print(f"Filtered true intervals: {true_intervals}")
-    print(f"Filtered true labels: {true_labels}")
-
-    # Handle cases where intervals are empty after filtering
-    if len(pred_boundaries) == 0 or len(true_intervals) == 0:
-        print("Warning: Empty intervals detected after filtering. Returning default scores.")
-        return {**scores_metrical, **{f'segment/{k}': 0 for k in mir_eval.segment.metrics.keys()}}
-
-    # Call mir_eval.segment.evaluate with cleaned intervals
-    scores_functional = mir_eval.segment.evaluate(
-        true_intervals, true_labels, pred_boundaries, pred_labels, trim=False
-    )
-    scores_functional = {f'segment/{k}': v for k, v in scores_functional.items()}
-
-    scores = {**scores_functional, **scores_metrical}
-
-    return scores
 
 
 
