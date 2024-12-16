@@ -24,6 +24,7 @@ def postprocess_functional_structure(
 
   duration = len(prob_sections) * cfg.hop_size / cfg.sample_rate
   pred_boundary_times = event_frames_to_time(boundary, cfg)
+  print(pred_boundary_times)
   if pred_boundary_times[0] != 0:
     pred_boundary_times = np.insert(pred_boundary_times, 0, 0)
   if pred_boundary_times[-1] != duration:
