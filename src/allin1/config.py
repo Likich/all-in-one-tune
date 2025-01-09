@@ -47,7 +47,7 @@ class HarmonixConfig(DataConfig):
 
   demixed: bool = True
   num_instruments: int = 4
-  num_labels: int = 4
+  num_labels: int = 12
 
   path_base_dir: str = './files/'
   path_track_dir: str = './files/tracks/'
