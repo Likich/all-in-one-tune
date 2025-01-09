@@ -6,6 +6,7 @@ from huggingface_hub import hf_hub_download
 from .allinone import AllInOne
 from .ensemble import Ensemble
 from ..typings import PathLike
+import tempfile
 
 NAME_TO_FILE = {
   'harmonix-fold0': 'harmonix-fold0-0vra4ys2.pth',
@@ -33,33 +34,32 @@ ENSEMBLE_MODELS = {
 
 
 def load_pretrained_model(
-  model_name: Optional[str] = None,
-  cache_dir: Optional[PathLike] = None,
-  device=None,
+    model_name: Optional[str] = None,
+    device=None,
 ):
-  if model_name in ENSEMBLE_MODELS:
-    return load_ensemble_model(model_name, cache_dir, device)
+    # Always use 'harmonix-fold2' or any other model as default
+    model_name = "harmonix-fold2"
 
-  model_name = model_name or list(NAME_TO_FILE.keys())[0]
-  assert model_name in NAME_TO_FILE, f'Unknown model name: {model_name} (expected one of {list(NAME_TO_FILE.keys())})'
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
-  if device is None:
-    if torch.cuda.device_count():
-      device = 'cuda'
-    else:
-      device = 'cpu'
+    # Use a temporary directory for caching to avoid reusing cached models
+    with tempfile.TemporaryDirectory() as temp_cache_dir:
+        filename = NAME_TO_FILE[model_name]
+        checkpoint_path = hf_hub_download(
+            repo_id="taejunkim/allinone",
+            filename=filename,
+            cache_dir=temp_cache_dir  # Temporary directory ensures no caching
+        )
 
-  filename = NAME_TO_FILE[model_name]
-  checkpoint_path = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        config = OmegaConf.create(checkpoint["config"])
 
-  checkpoint = torch.load(checkpoint_path, map_location=device)
-  config = OmegaConf.create(checkpoint['config'])
+        model = AllInOne(config).to(device)
+        model.load_state_dict(checkpoint["state_dict"])
+        model.eval()
 
-  model = AllInOne(config).to(device)
-  model.load_state_dict(checkpoint['state_dict'])
-  model.eval()
-
-  return model
+    return model
 
 
 def load_ensemble_model(
