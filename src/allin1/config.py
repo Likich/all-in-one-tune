@@ -97,13 +97,13 @@ class Config:
 
   # Training configurations -----------------------------------------------
   segment_size: Optional[float] = 300
-  batch_size: int = 1
+  batch_size: int = 2
 
   optimizer: str = 'radam'
   sched: Optional[str] = 'plateau'
   lookahead: bool = False
 
-  lr: float = 0.005
+  lr: float = 0.001
   warmup_lr: float = 1e-5
   warmup_epochs: int = 0
   cooldown_epochs: int = 0
