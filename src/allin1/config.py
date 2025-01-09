@@ -3,9 +3,13 @@ from dataclasses import dataclass, field
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
 
-HARMONIX_LABELS_INFERENCE = [
+
+
+HARMONIX_LABELS = [
   'start',
   'end',
+  'song_end',
+  'song_start',
   'intro',
   'outro',
   'break',
@@ -14,14 +18,6 @@ HARMONIX_LABELS_INFERENCE = [
   'solo',
   'verse',
   'chorus',
-]
-
-
-HARMONIX_LABELS_TRAIN = [
-  'start',
-  'end',
-  'song_end',
-  'song_start'
 ]
 
 
