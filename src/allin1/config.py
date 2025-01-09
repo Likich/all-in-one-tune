@@ -8,8 +8,8 @@ from omegaconf import MISSING
 HARMONIX_LABELS = [
   'start',
   'end',
-  'song_end',
-  'song_start',
+  # 'song_end',
+  # 'song_start',
   'intro',
   'outro',
   'break',
@@ -47,7 +47,7 @@ class HarmonixConfig(DataConfig):
 
   demixed: bool = True
   num_instruments: int = 4
-  num_labels: int = 12
+  num_labels: int = 10
 
   path_base_dir: str = './files/'
   path_track_dir: str = './files/tracks/'
