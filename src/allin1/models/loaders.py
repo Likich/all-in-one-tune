@@ -34,32 +34,33 @@ ENSEMBLE_MODELS = {
 
 
 def load_pretrained_model(
-    model_name: Optional[str] = None,
-    device=None,
+  model_name: Optional[str] = None,
+  cache_dir: Optional[PathLike] = None,
+  device=None,
 ):
-    # Always use 'harmonix-fold2' or any other model as default
-    model_name = "harmonix-fold2"
+  if model_name in ENSEMBLE_MODELS:
+    return load_ensemble_model(model_name, cache_dir, device)
 
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+  model_name = model_name or list(NAME_TO_FILE.keys())[0]
+  assert model_name in NAME_TO_FILE, f'Unknown model name: {model_name} (expected one of {list(NAME_TO_FILE.keys())})'
 
-    # Use a temporary directory for caching to avoid reusing cached models
-    with tempfile.TemporaryDirectory() as temp_cache_dir:
-        filename = NAME_TO_FILE[model_name]
-        checkpoint_path = hf_hub_download(
-            repo_id="taejunkim/allinone",
-            filename=filename,
-            cache_dir=temp_cache_dir  # Temporary directory ensures no caching
-        )
+  if device is None:
+    if torch.cuda.device_count():
+      device = 'cuda'
+    else:
+      device = 'cpu'
 
-        checkpoint = torch.load(checkpoint_path, map_location=device)
-        config = OmegaConf.create(checkpoint["config"])
+  filename = NAME_TO_FILE[model_name]
+  checkpoint_path = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
 
-        model = AllInOne(config).to(device)
-        model.load_state_dict(checkpoint["state_dict"])
-        model.eval()
+  checkpoint = torch.load(checkpoint_path, map_location=device)
+  config = OmegaConf.create(checkpoint['config'])
 
-    return model
+  model = AllInOne(config).to(device)
+  model.load_state_dict(checkpoint['state_dict'])
+  model.eval()
+
+  return model
 
 
 def load_ensemble_model(
