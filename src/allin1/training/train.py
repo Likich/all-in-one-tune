@@ -30,7 +30,7 @@ def main(cfg: Config):
   model = AllInOneTrainer(cfg)
 
   wandb_logger = WandbLogger(
-    project='outputs/models',
+    project='models',
     tags=[
            f'fold{cfg.fold}'
          ] + (
