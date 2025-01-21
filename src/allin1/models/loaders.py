@@ -33,25 +33,34 @@ ENSEMBLE_MODELS = {
 }
 
 
+import os
+
 def load_pretrained_model(
   model_name: Optional[str] = None,
   cache_dir: Optional[PathLike] = None,
   device=None,
+  checkpoint_dir: Optional[PathLike] = None,
 ):
   if model_name in ENSEMBLE_MODELS:
-    return load_ensemble_model(model_name, cache_dir, device)
+    return load_ensemble_model(model_name, cache_dir, device, checkpoint_dir)
 
   model_name = model_name or list(NAME_TO_FILE.keys())[0]
   assert model_name in NAME_TO_FILE, f'Unknown model name: {model_name} (expected one of {list(NAME_TO_FILE.keys())})'
 
   if device is None:
-    if torch.cuda.device_count():
-      device = 'cuda'
-    else:
-      device = 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
   filename = NAME_TO_FILE[model_name]
-  checkpoint_path = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
+  if checkpoint_dir:
+    local_checkpoint_path = os.path.join(checkpoint_dir, filename)
+    if os.path.exists(local_checkpoint_path):
+      print(f"Loading checkpoint from local directory: {local_checkpoint_path}")
+      checkpoint_path = local_checkpoint_path
+    else:
+      raise FileNotFoundError(f"Checkpoint {filename} not found in {checkpoint_dir}.")
+  else:
+    print(f"Downloading checkpoint {filename} from Hugging Face Hub...")
+    checkpoint_path = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
 
   checkpoint = torch.load(checkpoint_path, map_location=device)
   config = OmegaConf.create(checkpoint['config'])
@@ -67,10 +76,11 @@ def load_ensemble_model(
   model_name: Optional[str] = None,
   cache_dir: Optional[PathLike] = None,
   device=None,
+  checkpoint_dir: Optional[PathLike] = None,
 ):
   models = []
   for model_name in ENSEMBLE_MODELS[model_name]:
-    model = load_pretrained_model(model_name, cache_dir, device)
+    model = load_pretrained_model(model_name, cache_dir, device, checkpoint_dir)
     models.append(model)
 
   ensemble = Ensemble(models).to(device)
