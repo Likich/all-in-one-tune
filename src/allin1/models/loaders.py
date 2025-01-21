@@ -78,7 +78,11 @@ def load_pretrained_model(
     else:
         raise ValueError("Checkpoint does not contain a 'state_dict' key.")
 
-    config = OmegaConf.create(checkpoint.get('config', {}))  # Load config if available, else use default
+    filename = NAME_TO_FILE[model_name]
+    checkpoint_path_original = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
+
+    checkpoint_config = torch.load(checkpoint_path_original, map_location=device)
+    config = OmegaConf.create(checkpoint_config['config'])
     model = AllInOne(config).to(device)
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
