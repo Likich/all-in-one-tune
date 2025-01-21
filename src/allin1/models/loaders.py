@@ -80,8 +80,9 @@ def load_pretrained_model(
 
     config = OmegaConf.create(checkpoint.get('config', {}))  # Load config if available, else use default
     model = AllInOne(config).to(device)
-    model.load_state_dict(state_dict)
+    model.load_state_dict(checkpoint['state_dict'])
     model.eval()
+
 
     return model
 
