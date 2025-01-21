@@ -16,37 +16,41 @@ from .postprocessing import (
 
 
 def run_inference(
-  path: Path,
-  spec_path: Path,
-  model: torch.nn.Module,
-  device: str,
-  include_activations: bool,
-  include_embeddings: bool,
+    path: Path,
+    spec_path: Path,
+    model: torch.nn.Module,
+    device: str,
+    include_activations: bool,
+    include_embeddings: bool,
 ) -> AnalysisResult:
-  spec = np.load(spec_path)
-  spec = torch.from_numpy(spec).unsqueeze(0).to(device)
+    spec = np.load(spec_path)
+    print(spec_path)
+    spec = torch.from_numpy(spec).unsqueeze(0).to(device)
 
-  logits = model(spec)
+    if not callable(model):
+        raise TypeError(f"Model is not callable. Type: {type(model)}")
 
-  metrical_structure = postprocess_metrical_structure(logits, model.cfg)
-  functional_structure = postprocess_functional_structure(logits, model.cfg)
-  bpm = estimate_tempo_from_beats(metrical_structure['beats'])
+    logits = model(spec)
 
-  result = AnalysisResult(
-    path=path,
-    bpm=bpm,
-    segments=functional_structure,
-    **metrical_structure,
-  )
+    metrical_structure = postprocess_metrical_structure(logits, model.cfg)
+    functional_structure = postprocess_functional_structure(logits, model.cfg)
+    bpm = estimate_tempo_from_beats(metrical_structure['beats'])
 
-  if include_activations:
-    activations = compute_activations(logits)
-    result.activations = activations
+    result = AnalysisResult(
+        path=path,
+        bpm=bpm,
+        segments=functional_structure,
+        **metrical_structure,
+    )
 
-  if include_embeddings:
-    result.embeddings = logits.embeddings[0].cpu().numpy()
+    if include_activations:
+        activations = compute_activations(logits)
+        result.activations = activations
 
-  return result
+    if include_embeddings:
+        result.embeddings = logits.embeddings[0].cpu().numpy()
+
+    return result
 
 
 def compute_activations(logits: AllInOneOutput):
