@@ -15,7 +15,7 @@ from .helpers import (
   save_results,
 )
 from .utils import mkpath, load_result
-from .typings import AnalysisResult, PathLike
+from .typings import AnalysisResult, PathLike, Optional
 
 
 def analyze(
