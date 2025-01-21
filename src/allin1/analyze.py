@@ -101,9 +101,9 @@ def analyze(
         model = load_pretrained_model(
             model_name=model if not checkpoint_path else None,
             device=device,
-            checkpoint_path=checkpoint_path,  # Default unless using checkpoint_path
-            cache_dir=None,  # Set if you want to fallback to cache_dir
-        ) if not checkpoint_path else torch.load(checkpoint_path)
+            checkpoint_path=checkpoint_path
+        )
+
 
         with torch.no_grad():
             pbar = tqdm(zip(todo_paths, spec_paths), total=len(todo_paths))
