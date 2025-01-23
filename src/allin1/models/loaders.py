@@ -91,7 +91,9 @@ def load_pretrained_model(
     model.load_state_dict(adjusted_state_dict, strict=False)
     num_input_features = model.function_classifier.classifier.in_features
     model.function_classifier.classifier = torch.nn.Linear(num_input_features, 4)
-    model.function_classifier.bias = torch.nn.Linear(num_input_features, 4)
+    model.function_classifier.classifier.bias = torch.nn.Linear(4)
+    model.function_classifier.classifier.weight = torch.nn.Linear(4, num_input_features)
+  
     model.eval()
 
 
