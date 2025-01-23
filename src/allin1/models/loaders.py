@@ -83,6 +83,7 @@ def load_pretrained_model(
 
     checkpoint_config = torch.load(checkpoint_path_original, map_location=device)
     config = OmegaConf.create(checkpoint_config['config'])
+    print('config', checkpoint_config['config'])
     config.data.num_labels = 4
     model = AllInOne(config).to(device)
     adjusted_state_dict = {
