@@ -29,6 +29,7 @@ class AllInOne(nn.Module):
     self.downbeat_classifier = Head(num_classes=1, cfg=cfg, init_confidence=0.0125)
     self.section_classifier = Head(num_classes=1, cfg=cfg, init_confidence=0.001)
     self.function_classifier = Head(num_classes=cfg.data.num_labels, cfg=cfg)
+    print(cfg.data.num_labels)
 
     self.dropout = nn.Dropout(cfg.drop_last)
 
