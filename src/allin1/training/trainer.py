@@ -119,6 +119,14 @@ class AllInOneTrainer(LightningModule):
     def test_step(self, batch, batch_idx):
         self.evaluation_step(batch, batch_idx, prefix='test/')
 
+    def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
+        assert batch['spec'].shape[0] == 1, 'Batch size must be 1 for prediction'
+        outputs: AllInOneOutput = self(batch['spec'])
+        # losses = self.compute_losses(outputs, batch)
+        predictions = self.compute_predictions(outputs)
+        # scores = self.compute_metrics(predictions, batch)
+        return batch, outputs, predictions
+
     def compute_losses(self, outputs: AllInOneOutput, batch: Dict, prefix: str = None):
         loss = 0.0
         losses = {}
@@ -157,145 +165,135 @@ class AllInOneTrainer(LightningModule):
             losses = prefix_dict(losses, prefix)
         return losses
 
+
+
+    def compute_predictions(self, outputs: AllInOneOutput, mask=None):
+        raw_prob_beats = torch.sigmoid(outputs.logits_beat.detach())
+        raw_prob_downbeats = torch.sigmoid(outputs.logits_downbeat.detach())
+        raw_prob_sections = torch.sigmoid(outputs.logits_section.detach())
+        raw_prob_functions = torch.softmax(outputs.logits_function.detach(), dim=1)
+    
+        prob_beats, _ = local_maxima(raw_prob_beats, filter_size=self.cfg.min_hops_per_beat + 1)
+        prob_downbeats, _ = local_maxima(raw_prob_downbeats, filter_size=4 * self.cfg.min_hops_per_beat + 1)
+        prob_sections, _ = local_maxima(raw_prob_sections, filter_size=4 * self.cfg.min_hops_per_beat + 1)
+        prob_functions = raw_prob_functions.cpu().numpy()
+    
+        if mask is not None:
+          prob_beats *= mask
+          prob_downbeats *= mask
+          prob_sections *= mask
+    
+        pred_beats = prob_beats > self.cfg.threshold_beat
+        pred_downbeats = prob_downbeats > self.cfg.threshold_downbeat
+        pred_sections = prob_sections > self.cfg.threshold_section
+        pred_functions = np.argmax(prob_functions, axis=1)
+        if mask is not None:
+          pred_functions = np.where(mask.cpu().numpy(), pred_functions, -1)
+    
+        pred_beat_times = self.tensor_to_time(pred_beats)
+        pred_downbeat_times = self.tensor_to_time(pred_downbeats)
+        pred_section_times = self.tensor_to_time(pred_sections)
+    
+        p = AllInOnePrediction(
+          raw_prob_beats=raw_prob_beats,
+          raw_prob_downbeats=raw_prob_downbeats,
+          raw_prob_sections=raw_prob_sections,
+          raw_prob_functions=raw_prob_functions,
+    
+          prob_beats=prob_beats,
+          prob_downbeats=prob_downbeats,
+          prob_sections=prob_sections,
+          prob_functions=prob_functions,
+    
+          pred_beats=pred_beats,
+          pred_downbeats=pred_downbeats,
+          pred_sections=pred_sections,
+          pred_functions=pred_functions,
+    
+          pred_beat_times=pred_beat_times,
+          pred_downbeat_times=pred_downbeat_times,
+          pred_section_times=pred_section_times,
+        )
+    
+        return p
+
+    def compute_metrics(self, p: AllInOnePrediction, batch: Dict, prefix: str = None):
+        eval_beat = [
+          BeatEvaluation(pred, true)
+          for pred, true in zip(p.pred_beat_times, batch['true_beat_times'])
+          if len(pred) > 1 and len(true) > 1
+        ]
+        eval_downbeat = [
+          BeatEvaluation(pred, true)
+          for pred, true in zip(p.pred_downbeat_times, batch['true_downbeat_times'])
+          if len(pred) > 1 and len(true) > 1
+        ]
+        eval_section = [
+          BeatEvaluation(pred, true, fmeasure_window=0.5)
+          for pred, true in zip(p.pred_section_times, batch['true_section_times'])
+          if len(pred) > 1 and len(true) > 1
+        ]
+    
+        score_beat = BeatMeanEvaluation(eval_beat)
+        score_downbeat = BeatMeanEvaluation(eval_downbeat)
+        score_section = BeatMeanEvaluation(eval_section)
+    
+        mask = batch['mask'].cpu().numpy()
+        true_functions = batch['true_function'].cpu().numpy()
+        true_functions = np.where(mask, true_functions, -1)
+        true_functions = true_functions.flatten()
+        true_functions = true_functions[true_functions != -1]
+    
+        pred_functions = p.pred_functions
+        pred_functions = np.where(mask, pred_functions, -1)
+        pred_functions = pred_functions.flatten()
+        pred_functions = pred_functions[pred_functions != -1]
+    
+        function_f1 = f1_score(true_functions, pred_functions, average='macro')
+        function_accuracy = accuracy_score(true_functions, pred_functions)
+    
+        d = dict(
+          beat_f1=score_beat.fmeasure,
+          beat_precision=score_beat.precision,
+          beat_recall=score_beat.recall,
+          beat_cmlt=score_beat.cmlt,
+          beat_amlt=score_beat.amlt,
+          downbeat_f1=score_downbeat.fmeasure,
+          downbeat_precision=score_downbeat.precision,
+          downbeat_recall=score_downbeat.recall,
+          downbeat_cmlt=score_downbeat.cmlt,
+          downbeat_amlt=score_downbeat.amlt,
+          section_f1=score_section.fmeasure,
+          section_precision=score_section.precision,
+          section_recall=score_section.recall,
+          function_f1=function_f1,
+          function_acc=function_accuracy,
+        )
+    
+        if prefix:
+          d = prefix_dict(d, prefix)
+        return d
+
+    def tensor_to_time(self, tensor: Union[torch.Tensor, NDArray]):
+        """
+        Args:
+          tensor: a binary event tensor with shape (batch, frame)
+        """
+        if torch.is_tensor(tensor):
+          tensor = tensor.cpu().numpy()
+        batch_size = tensor.shape[0]
+        i_examples, i_frames = np.where(tensor)
+        times = librosa.frames_to_time(i_frames, sr=self.cfg.sample_rate, hop_length=self.cfg.hop_size)
+        times = [times[i_examples == i] for i in range(batch_size)]
+        return times
+
     def on_fit_end(self):
         print('=> Fit ended.')
         if self.trainer.is_global_zero and self.trainer.checkpoint_callback.best_model_path:
-            print('=> Loading best model...')
-            model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-            print('=> Loaded best model.')
-
-
-def prefix_dict(d: Dict, prefix: str):
-    return {prefix + key: value for key, value in d.items()}
-
-
-def compute_predictions(self, outputs: AllInOneOutput, mask=None):
-    raw_prob_beats = torch.sigmoid(outputs.logits_beat.detach())
-    raw_prob_downbeats = torch.sigmoid(outputs.logits_downbeat.detach())
-    raw_prob_sections = torch.sigmoid(outputs.logits_section.detach())
-    raw_prob_functions = torch.softmax(outputs.logits_function.detach(), dim=1)
-
-    prob_beats, _ = local_maxima(raw_prob_beats, filter_size=self.cfg.min_hops_per_beat + 1)
-    prob_downbeats, _ = local_maxima(raw_prob_downbeats, filter_size=4 * self.cfg.min_hops_per_beat + 1)
-    prob_sections, _ = local_maxima(raw_prob_sections, filter_size=4 * self.cfg.min_hops_per_beat + 1)
-    prob_functions = raw_prob_functions.cpu().numpy()
-
-    if mask is not None:
-      prob_beats *= mask
-      prob_downbeats *= mask
-      prob_sections *= mask
-
-    pred_beats = prob_beats > self.cfg.threshold_beat
-    pred_downbeats = prob_downbeats > self.cfg.threshold_downbeat
-    pred_sections = prob_sections > self.cfg.threshold_section
-    pred_functions = np.argmax(prob_functions, axis=1)
-    if mask is not None:
-      pred_functions = np.where(mask.cpu().numpy(), pred_functions, -1)
-
-    pred_beat_times = self.tensor_to_time(pred_beats)
-    pred_downbeat_times = self.tensor_to_time(pred_downbeats)
-    pred_section_times = self.tensor_to_time(pred_sections)
-
-    p = AllInOnePrediction(
-      raw_prob_beats=raw_prob_beats,
-      raw_prob_downbeats=raw_prob_downbeats,
-      raw_prob_sections=raw_prob_sections,
-      raw_prob_functions=raw_prob_functions,
-
-      prob_beats=prob_beats,
-      prob_downbeats=prob_downbeats,
-      prob_sections=prob_sections,
-      prob_functions=prob_functions,
-
-      pred_beats=pred_beats,
-      pred_downbeats=pred_downbeats,
-      pred_sections=pred_sections,
-      pred_functions=pred_functions,
-
-      pred_beat_times=pred_beat_times,
-      pred_downbeat_times=pred_downbeat_times,
-      pred_section_times=pred_section_times,
-    )
-
-    return p
-
-  def compute_metrics(self, p: AllInOnePrediction, batch: Dict, prefix: str = None):
-    eval_beat = [
-      BeatEvaluation(pred, true)
-      for pred, true in zip(p.pred_beat_times, batch['true_beat_times'])
-      if len(pred) > 1 and len(true) > 1
-    ]
-    eval_downbeat = [
-      BeatEvaluation(pred, true)
-      for pred, true in zip(p.pred_downbeat_times, batch['true_downbeat_times'])
-      if len(pred) > 1 and len(true) > 1
-    ]
-    eval_section = [
-      BeatEvaluation(pred, true, fmeasure_window=0.5)
-      for pred, true in zip(p.pred_section_times, batch['true_section_times'])
-      if len(pred) > 1 and len(true) > 1
-    ]
-
-    score_beat = BeatMeanEvaluation(eval_beat)
-    score_downbeat = BeatMeanEvaluation(eval_downbeat)
-    score_section = BeatMeanEvaluation(eval_section)
-
-    mask = batch['mask'].cpu().numpy()
-    true_functions = batch['true_function'].cpu().numpy()
-    true_functions = np.where(mask, true_functions, -1)
-    true_functions = true_functions.flatten()
-    true_functions = true_functions[true_functions != -1]
-
-    pred_functions = p.pred_functions
-    pred_functions = np.where(mask, pred_functions, -1)
-    pred_functions = pred_functions.flatten()
-    pred_functions = pred_functions[pred_functions != -1]
-
-    function_f1 = f1_score(true_functions, pred_functions, average='macro')
-    function_accuracy = accuracy_score(true_functions, pred_functions)
-
-    d = dict(
-      beat_f1=score_beat.fmeasure,
-      beat_precision=score_beat.precision,
-      beat_recall=score_beat.recall,
-      beat_cmlt=score_beat.cmlt,
-      beat_amlt=score_beat.amlt,
-      downbeat_f1=score_downbeat.fmeasure,
-      downbeat_precision=score_downbeat.precision,
-      downbeat_recall=score_downbeat.recall,
-      downbeat_cmlt=score_downbeat.cmlt,
-      downbeat_amlt=score_downbeat.amlt,
-      section_f1=score_section.fmeasure,
-      section_precision=score_section.precision,
-      section_recall=score_section.recall,
-      function_f1=function_f1,
-      function_acc=function_accuracy,
-    )
-
-    if prefix:
-      d = prefix_dict(d, prefix)
-    return d
-
-  def tensor_to_time(self, tensor: Union[torch.Tensor, NDArray]):
-    """
-    Args:
-      tensor: a binary event tensor with shape (batch, frame)
-    """
-    if torch.is_tensor(tensor):
-      tensor = tensor.cpu().numpy()
-    batch_size = tensor.shape[0]
-    i_examples, i_frames = np.where(tensor)
-    times = librosa.frames_to_time(i_frames, sr=self.cfg.sample_rate, hop_length=self.cfg.hop_size)
-    times = [times[i_examples == i] for i in range(batch_size)]
-    return times
-
-  def on_fit_end(self):
-    print('=> Fit ended.')
-    if self.trainer.is_global_zero and self.trainer.checkpoint_callback.best_model_path:
-      print('=> Loading best model...')
-      #changed
-      model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-      print('=> Loaded best model.')
+          print('=> Loading best model...')
+          #changed
+          model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+          print('=> Loaded best model.')
 
 
 def prefix_dict(d: Dict, prefix: str):
