@@ -23,7 +23,7 @@ def analyze(
     out_dir: PathLike = None,
     visualize: Union[bool, PathLike] = False,
     sonify: Union[bool, PathLike] = False,
-    model: str = "harmonix-fold2",  # Specify harmonix-fold2 as default
+    model: str = "harmonix-fold2",  # Default to harmonix-fold2
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     checkpoint_path: PathLike = None,  # Path to your custom checkpoint
     include_activations: bool = False,
@@ -37,7 +37,6 @@ def analyze(
     """
     Analyzes the provided audio files and returns the analysis results.
     """
-    # Clean up the arguments.
     return_list = True
     if not isinstance(paths, list):
         return_list = False
@@ -50,7 +49,6 @@ def analyze(
     demix_dir = mkpath(demix_dir)
     spec_dir = mkpath(spec_dir)
 
-    # Check if the results are already computed.
     if out_dir is None or overwrite:
         todo_paths = paths
         exist_paths = []
@@ -63,7 +61,6 @@ def analyze(
     if exist_paths:
         print("=> To re-analyze, please use --overwrite option.")
 
-    # Load the results for the tracks that are already analyzed.
     results = []
     if exist_paths:
         results += [
@@ -75,27 +72,21 @@ def analyze(
             for exist_path in tqdm(exist_paths, desc="Loading existing results")
         ]
 
-    # Analyze the tracks that are not analyzed yet.
     if todo_paths:
-        # Run HTDemucs for source separation only for the tracks that are not analyzed yet.
         demix_paths = demix(todo_paths, demix_dir, device)
-
-        # Extract spectrograms for the tracks that are not analyzed yet.
         spec_paths = extract_spectrograms(demix_paths, spec_dir, multiprocess)
 
-        # Initialize the model with harmonix-fold2
         print(f"=> Initializing model: {model}")
         pretrained_model = load_pretrained_model(model_name=model, device=device)
-        cfg = pretrained_model.cfg  # Retrieve the config from the pretrained model
-        cfg.data.num_labels = 4  # Set the number of labels to 4
+        pretrained_model.to(device)  # Ensure model is on the specified device
 
-        # Modify the classification head
+        cfg = pretrained_model.cfg
+        cfg.data.num_labels = 4  # Update number of labels
         pretrained_model.function_classifier.classifier = torch.nn.Linear(
             cfg.data.num_instruments * cfg.dim_embed, 4
-        )
+        ).to(device)  # Ensure classifier is on the correct device
         print(f"=> Updated classification head to output {cfg.data.num_labels} labels.")
 
-        # Load the checkpoint weights if provided
         if checkpoint_path:
             print(f"=> Loading weights from checkpoint: {checkpoint_path}")
             checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -107,22 +98,23 @@ def analyze(
             for path, spec_path in pbar:
                 pbar.set_description(f"Analyzing {path.name}")
 
+                # Ensure spectrogram is loaded to the correct device
+                spec = torch.load(spec_path).to(device)
+
                 result = run_inference(
                     path=path,
-                    spec_path=spec_path,
+                    spec_path=spec,
                     model=pretrained_model,
                     device=device,
                     include_activations=include_activations,
                     include_embeddings=include_embeddings,
                 )
 
-                # Save the result right after the inference.
                 if out_dir is not None:
                     save_results(result, out_dir)
 
                 results.append(result)
 
-    # Sort the results by the original order of the tracks.
     results = sorted(results, key=lambda result: paths.index(result.path))
 
     if visualize:
@@ -152,3 +144,4 @@ def analyze(
     if not return_list:
         return results[0]
     return results
+
