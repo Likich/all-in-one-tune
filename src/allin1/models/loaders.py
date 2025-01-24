@@ -3,7 +3,7 @@ import torch
 from typing import Optional
 from omegaconf import OmegaConf
 from huggingface_hub import hf_hub_download
-from .allinone import AllInOne
+from .allinone import AllInOne, AllInOneFinetune
 from .ensemble import Ensemble
 from ..typings import PathLike
 import tempfile
@@ -35,12 +35,75 @@ ENSEMBLE_MODELS = {
 
 import os
 
+# def load_pretrained_model(
+#     model_name: Optional[str] = None,
+#     cache_dir: Optional[PathLike] = None,
+#     device=None,
+#     checkpoint_dir: Optional[PathLike] = None,
+#     checkpoint_path: Optional[str] = None,  # Allow direct checkpoint path
+# ):
+#     if model_name in ENSEMBLE_MODELS:
+#         return load_ensemble_model(model_name, cache_dir, device, checkpoint_dir)
+
+#     model_name = model_name or list(NAME_TO_FILE.keys())[0]
+#     assert model_name in NAME_TO_FILE or checkpoint_path, (
+#         f"Unknown model name: {model_name} (expected one of {list(NAME_TO_FILE.keys())} or a valid checkpoint path)"
+#     )
+
+    # if device is None:
+    #     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    # # Load checkpoint from custom path or predefined file
+    # if checkpoint_path:
+    #     print(f"Loading checkpoint from: {checkpoint_path}")
+    #     checkpoint = torch.load(checkpoint_path, map_location=device)
+    # else:
+    #     filename = NAME_TO_FILE[model_name]
+    #     if checkpoint_dir:
+    #         local_checkpoint_path = os.path.join(checkpoint_dir, filename)
+    #         if os.path.exists(local_checkpoint_path):
+    #             print(f"Loading checkpoint from local directory: {local_checkpoint_path}")
+    #             checkpoint = torch.load(local_checkpoint_path, map_location=device)
+    #         else:
+    #             raise FileNotFoundError(f"Checkpoint {filename} not found in {checkpoint_dir}.")
+    #     else:
+    #         print(f"Downloading checkpoint {filename} from Hugging Face Hub...")
+    #         checkpoint_path = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
+    #         checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    # # Load state_dict into the model
+    # if 'state_dict' in checkpoint:
+    #     print("Extracting state_dict from checkpoint...")
+    #     state_dict = checkpoint['state_dict']
+    # else:
+    #     raise ValueError("Checkpoint does not contain a 'state_dict' key.")
+
+    # filename = NAME_TO_FILE[model_name]
+    # checkpoint_path_original = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
+
+    # checkpoint_config = torch.load(checkpoint_path_original, map_location=device)
+    # config = OmegaConf.create(checkpoint_config['config'])
+    # print('config', checkpoint_config['config'])
+    # config.data.num_labels = 4
+    # model = AllInOne(config).to(device)
+    # adjusted_state_dict = {
+    #   key.replace("model.", ""): value for key, value in checkpoint["state_dict"].items()}
+
+    # model.load_state_dict(adjusted_state_dict, strict=False)
+  
+    # model.eval()
+
+
+    # return model
+
+
 def load_pretrained_model(
     model_name: Optional[str] = None,
     cache_dir: Optional[PathLike] = None,
     device=None,
     checkpoint_dir: Optional[PathLike] = None,
     checkpoint_path: Optional[str] = None,  # Allow direct checkpoint path
+    num_finetune_classes: int = None,  # Number of output classes for finetuning
 ):
     if model_name in ENSEMBLE_MODELS:
         return load_ensemble_model(model_name, cache_dir, device, checkpoint_dir)
@@ -71,7 +134,7 @@ def load_pretrained_model(
             checkpoint_path = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
             checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    # Load state_dict into the model
+    # Load state_dict from checkpoint
     if 'state_dict' in checkpoint:
         print("Extracting state_dict from checkpoint...")
         state_dict = checkpoint['state_dict']
@@ -84,21 +147,21 @@ def load_pretrained_model(
     checkpoint_config = torch.load(checkpoint_path_original, map_location=device)
     config = OmegaConf.create(checkpoint_config['config'])
     print('config', checkpoint_config['config'])
-    config.data.num_labels = 4
-    model = AllInOne(config).to(device)
+
+    # Update the number of labels for finetuning if specified
+    if num_finetune_classes is not None:
+        config.data.num_labels = num_finetune_classes
+        model = AllInOneFinetune(config, num_finetune_classes).to(device)
+    else:
+        model = AllInOne(config).to(device)
+
+    # Adjust and load state_dict
     adjusted_state_dict = {
-      key.replace("model.", ""): value for key, value in checkpoint["state_dict"].items()}
-
+        key.replace("model.", ""): value for key, value in checkpoint["state_dict"].items()
+    }
     model.load_state_dict(adjusted_state_dict, strict=False)
-  
+
     model.eval()
-
-
-
-
-  
-
-
     return model
 
 
