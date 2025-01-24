@@ -26,18 +26,30 @@ warnings.filterwarnings('ignore', category=UserWarning, message='no annotated te
 
 
 class AllInOneTrainer(LightningModule):
-  scheduler: Scheduler
+    scheduler: Scheduler
 
-  def __init__(self, cfg: Config):
-    super().__init__()
-    self.cfg = cfg
+    def __init__(self, cfg: Config, pretrained_model_name: Optional[str] = None, cache_dir: Optional[str] = None):
+        super().__init__()
+        self.cfg = cfg
 
-    if cfg.model == 'allinone':
-      self.model = AllInOne(cfg)
-    else:
-      raise NotImplementedError(f'Unknown model: {cfg.model}')
+        if cfg.model == 'allinone':
+            self.model = AllInOne(cfg)
+        else:
+            raise NotImplementedError(f'Unknown model: {cfg.model}')
 
-    self.lr = cfg.lr
+        # Load pretrained weights if specified
+        if pretrained_model_name:
+            print(f"=> Loading pretrained weights for {pretrained_model_name}")
+            from ..models import load_pretrained_model
+            pretrained_model = load_pretrained_model(
+                model_name=pretrained_model_name,
+                cache_dir=cache_dir,
+                device=self.device,
+            )
+            self.model.load_state_dict(pretrained_model.state_dict(), strict=False)
+            print(f"=> Pretrained weights for {pretrained_model_name} loaded.")
+
+        self.lr = cfg.lr
 
   def forward(self, x):
     return self.model(x)
