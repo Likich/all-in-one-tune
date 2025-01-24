@@ -18,14 +18,19 @@ from .utils import mkpath, load_result
 from .typings import AnalysisResult, PathLike, Optional
 
 
+from allin1.models import AllInOne
+from allin1.training.trainer import AllInOneTrainer  # Import the fine-tuning Trainer class
+from allin1.config import Config
+from allin1.models.loaders import load_pretrained_model
+
 def analyze(
     paths: Union[PathLike, List[PathLike]],
     out_dir: PathLike = None,
     visualize: Union[bool, PathLike] = False,
     sonify: Union[bool, PathLike] = False,
-    model: str = 'harmonix-all',
+    model: str = 'harmonix-fold2',
     device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
-    checkpoint_path: Optional[PathLike] = None,  # New parameter to specify custom checkpoint
+    checkpoint_path: Optional[PathLike] = None,  # Fine-tuned model checkpoint
     include_activations: bool = False,
     include_embeddings: bool = False,
     demix_dir: PathLike = './demix',
@@ -35,36 +40,41 @@ def analyze(
     multiprocess: bool = True,
 ) -> Union[AnalysisResult, List[AnalysisResult]]:
     """
-    Analyzes the provided audio files and returns the analysis results.
-
-    Parameters
-    ----------
-    paths : Union[PathLike, List[PathLike]]
-        List of paths or a single path to the audio files to be analyzed.
-    ...
-    checkpoint_path : PathLike, optional
-        Path to the specific checkpoint to be used for loading the model.
-    ...
-
-    Returns
-    -------
-    Union[AnalysisResult, List[AnalysisResult]]
-        Analysis results for the provided audio files.
+    Analyzes the provided audio files using a fine-tuned AllInOne model.
     """
-    # Clean up the arguments.
+    # Configuration for the fine-tuned model
+    cfg = Config()
+    cfg.data.num_labels = 4  # Ensure model outputs 4 labels
+
+    # Load the model
+    if checkpoint_path:
+        print(f"=> Loading fine-tuned model from checkpoint: {checkpoint_path}")
+        model = AllInOneTrainer(cfg=cfg)
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint['state_dict'], strict=False)
+        model.eval()
+        print(f"=> Loaded fine-tuned model with {cfg.data.num_labels} labels.")
+    else:
+        # Fallback to pretrained model loading
+        print("=> Loading pretrained model...")
+        model = load_pretrained_model(model_name=model, device=device)
+
+    # The rest of the `analyze` function remains the same
+    # Check if paths are valid and analyze the audio files
+
     return_list = True
     if not isinstance(paths, list):
         return_list = False
         paths = [paths]
     if not paths:
         raise ValueError('At least one path must be specified.')
+
     paths = [mkpath(p) for p in paths]
     paths = expand_paths(paths)
     check_paths(paths)
     demix_dir = mkpath(demix_dir)
     spec_dir = mkpath(spec_dir)
 
-    # Check if the results are already computed.
     if out_dir is None or overwrite:
         todo_paths = paths
         exist_paths = []
@@ -89,27 +99,14 @@ def analyze(
             for exist_path in tqdm(exist_paths, desc='Loading existing results')
         ]
 
-    # Analyze the tracks that are not analyzed yet.
     if todo_paths:
-        # Run HTDemucs for source separation only for the tracks that are not analyzed yet.
         demix_paths = demix(todo_paths, demix_dir, device)
-
-        # Extract spectrograms for the tracks that are not analyzed yet.
         spec_paths = extract_spectrograms(demix_paths, spec_dir, multiprocess)
-
-        # Load the model with specified checkpoint
-        model = load_pretrained_model(
-            model_name=model if not checkpoint_path else None,
-            device=device,
-            checkpoint_path=checkpoint_path
-        )
-
 
         with torch.no_grad():
             pbar = tqdm(zip(todo_paths, spec_paths), total=len(todo_paths))
             for path, spec_path in pbar:
                 pbar.set_description(f'Analyzing {path.name}')
-
                 result = run_inference(
                     path=path,
                     spec_path=spec_path,
@@ -118,16 +115,10 @@ def analyze(
                     include_activations=include_activations,
                     include_embeddings=include_embeddings,
                 )
-
-                # Save the result right after the inference.
-                # Checkpointing is always important for this kind of long-running tasks...
-                # for my mental health...
                 if out_dir is not None:
                     save_results(result, out_dir)
-
                 results.append(result)
 
-    # Sort the results by the original order of the tracks.
     results = sorted(results, key=lambda result: paths.index(result.path))
 
     if visualize:
@@ -157,4 +148,3 @@ def analyze(
     if not return_list:
         return results[0]
     return results
-
