@@ -4,7 +4,8 @@ import numpy as np
 import torch.nn.functional as F
 import torch
 
-from typing import Dict, Union
+
+from typing import Dict, Union, Optional
 from lightning import LightningModule
 from madmom.evaluation.beats import BeatEvaluation, BeatMeanEvaluation
 from numpy.typing import NDArray
@@ -13,24 +14,26 @@ from timm.optim.optim_factory import create_optimizer_v2 as create_optimizer
 from timm.scheduler import create_scheduler
 from timm.scheduler.scheduler import Scheduler
 
-from ..models import AllInOne
+from ..models import AllInOne, load_pretrained_model
 from ..typings import AllInOneOutput, AllInOnePrediction
 from ..config import Config
 from .helpers import local_maxima
 
-# For ignoring following warnings from madmom.evaluation
+# Ignore warnings from madmom
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='Mean of empty slice')
 warnings.filterwarnings('ignore', category=UserWarning, message='Not enough beat annotations')
 warnings.filterwarnings('ignore', category=UserWarning, message='The epoch parameter')
-warnings.filterwarnings('ignore', category=UserWarning, message='no annotated tempo strengths given')
+warnings.filterwarnings('ignore', category=UserWarning, message='No annotated tempo strengths given')
 
 
 class AllInOneTrainer(LightningModule):
     scheduler: Scheduler
-  def __init__(self, cfg: Config, pretrained_model_name: Optional[str] = None, cache_dir: Optional[str] = None):
+
+    def __init__(self, cfg: Config, pretrained_model_name: Optional[str] = None, cache_dir: Optional[str] = None):
         super().__init__()
         self.cfg = cfg
 
+        # Initialize the model
         if cfg.model == 'allinone':
             self.model = AllInOne(cfg)
         else:
@@ -39,152 +42,134 @@ class AllInOneTrainer(LightningModule):
         # Load pretrained weights if specified
         if pretrained_model_name:
             print(f"=> Loading pretrained weights for {pretrained_model_name}")
-            from ..models import load_pretrained_model
             pretrained_model = load_pretrained_model(
                 model_name=pretrained_model_name,
                 cache_dir=cache_dir,
-                device=self.device,
+                device=self.device if hasattr(self, 'device') else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             )
             self.model.load_state_dict(pretrained_model.state_dict(), strict=False)
             print(f"=> Pretrained weights for {pretrained_model_name} loaded.")
 
         self.lr = cfg.lr
 
-  def forward(self, x):
-    return self.model(x)
+    def forward(self, x):
+        return self.model(x)
 
-  def configure_optimizers(self):
-    optimizer = create_optimizer(
-      self,
-      opt=self.cfg.optimizer,
-      lr=self.cfg.lr,
-      weight_decay=self.cfg.weight_decay,
-    )
-    if self.cfg.sched is not None:
-      self.scheduler, _ = create_scheduler(self.cfg, optimizer)
+    def configure_optimizers(self):
+        optimizer = create_optimizer(
+            self,
+            opt=self.cfg.optimizer,
+            lr=self.cfg.lr,
+            weight_decay=self.cfg.weight_decay,
+        )
+        if self.cfg.sched is not None:
+            self.scheduler, _ = create_scheduler(self.cfg, optimizer)
 
-    return {
-      'optimizer': optimizer,
-    }
+        return {'optimizer': optimizer}
 
-  def on_train_epoch_end(self) -> None:
-    if self.cfg.sanity_check:
-      return
+    def on_train_epoch_end(self) -> None:
+        if self.cfg.sanity_check:
+            return
 
-    if self.cfg.sched == 'plateau':
-      if (self.current_epoch + 1) % self.cfg.validation_interval_epochs == 0:
-        optimizer = self.trainer.optimizers[0]
-        old_lr = optimizer.param_groups[0]['lr']
+        if self.cfg.sched == 'plateau':
+            if (self.current_epoch + 1) % self.cfg.validation_interval_epochs == 0:
+                optimizer = self.trainer.optimizers[0]
+                old_lr = optimizer.param_groups[0]['lr']
 
-        metric = self.trainer.callback_metrics[self.cfg.eval_metric]
-        self.scheduler.step(epoch=self.current_epoch + 1, metric=metric)
+                metric = self.trainer.callback_metrics[self.cfg.eval_metric]
+                self.scheduler.step(epoch=self.current_epoch + 1, metric=metric)
 
-        new_lr = optimizer.param_groups[0]['lr']
-        if new_lr < old_lr:
-          print(f'=> The LR is decayed from {old_lr} to {new_lr}. '
-                f'Loading the best model: {self.cfg.eval_metric}={self.trainer.checkpoint_callback.best_model_score}')
-          #changed
-          model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
-      elif self.current_epoch + 1 <= self.cfg.warmup_epochs:
-        self.scheduler.step(epoch=self.current_epoch + 1)
-    else:
-      self.scheduler.step(epoch=self.current_epoch + 1)
+                new_lr = optimizer.param_groups[0]['lr']
+                if new_lr < old_lr:
+                    print(f'=> The LR is decayed from {old_lr} to {new_lr}. '
+                          f'Loading the best model: {self.cfg.eval_metric}={self.trainer.checkpoint_callback.best_model_score}')
+                    model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+            elif self.current_epoch + 1 <= self.cfg.warmup_epochs:
+                self.scheduler.step(epoch=self.current_epoch + 1)
+        else:
+            self.scheduler.step(epoch=self.current_epoch + 1)
 
-  def training_step(self, batch, batch_idx):
-    batch_size = batch['spec'].shape[0]
-    outputs: AllInOneOutput = self(batch['spec'])
-    losses = self.compute_losses(outputs, batch, prefix='train/')
-    loss = losses.pop('train/loss')
-    self.log('train/loss', loss, prog_bar=True, batch_size=batch_size)
-    self.log_dict(losses, batch_size=batch_size)
+    def training_step(self, batch, batch_idx):
+        batch_size = batch['spec'].shape[0]
+        outputs: AllInOneOutput = self(batch['spec'])
+        losses = self.compute_losses(outputs, batch, prefix='train/')
+        loss = losses.pop('train/loss')
+        self.log('train/loss', loss, prog_bar=True, batch_size=batch_size)
+        self.log_dict(losses, batch_size=batch_size)
 
-    if (self.current_epoch + 1) % self.cfg.validation_interval_epochs == 0 or self.cfg.debug:
-      predictions = self.compute_predictions(outputs, mask=batch['mask'])
-      scores = self.compute_metrics(predictions, batch, prefix='train/')
-      self.log_dict(scores, sync_dist=True, on_epoch=True, batch_size=batch_size)
+        if (self.current_epoch + 1) % self.cfg.validation_interval_epochs == 0 or self.cfg.debug:
+            predictions = self.compute_predictions(outputs, mask=batch['mask'])
+            scores = self.compute_metrics(predictions, batch, prefix='train/')
+            self.log_dict(scores, sync_dist=True, on_epoch=True, batch_size=batch_size)
 
-      if self.cfg.sanity_check:
-        print('\n')
-        for k, v in {**losses, **scores}.items():
-          print(k, v.item())
-        print('\n')
+        return loss
 
-    return loss
+    def evaluation_step(self, batch, batch_idx, prefix=None):
+        batch_size = batch['spec'].shape[0]
+        outputs: AllInOneOutput = self(batch['spec'])
+        losses = self.compute_losses(outputs, batch, prefix)
+        predictions = self.compute_predictions(outputs)
+        scores = self.compute_metrics(predictions, batch, prefix)
+        self.log_dict(losses, sync_dist=True, batch_size=batch_size)
+        self.log_dict(scores, sync_dist=True, batch_size=batch_size)
 
-  def evaluation_step(self, batch, batch_idx, prefix=None):
-    batch_size = batch['spec'].shape[0]
-    outputs: AllInOneOutput = self(batch['spec'])
-    losses = self.compute_losses(outputs, batch, prefix)
-    predictions = self.compute_predictions(outputs)
-    scores = self.compute_metrics(predictions, batch, prefix)
-    self.log_dict(losses, sync_dist=True, batch_size=batch_size)
-    self.log_dict(scores, sync_dist=True, batch_size=batch_size)
+    def validation_step(self, batch, batch_idx):
+        self.evaluation_step(batch, batch_idx, prefix='val/')
 
-  def validation_step(self, batch, batch_idx):
-    self.evaluation_step(batch, batch_idx, prefix='val/')
+    def test_step(self, batch, batch_idx):
+        self.evaluation_step(batch, batch_idx, prefix='test/')
 
-  def test_step(self, batch, batch_idx):
-    self.evaluation_step(batch, batch_idx, prefix='test/')
+    def compute_losses(self, outputs: AllInOneOutput, batch: Dict, prefix: str = None):
+        loss = 0.0
+        losses = {}
 
-  def predict_step(self, batch, batch_idx: int, dataloader_idx: int = 0):
-    assert batch['spec'].shape[0] == 1, 'Batch size must be 1 for prediction'
-    outputs: AllInOneOutput = self(batch['spec'])
-    # losses = self.compute_losses(outputs, batch)
-    predictions = self.compute_predictions(outputs)
-    # scores = self.compute_metrics(predictions, batch)
-    return batch, outputs, predictions
+        loss_beat = F.binary_cross_entropy_with_logits(outputs.logits_beat, batch['widen_true_beat'], reduction='none')
+        loss_downbeat = F.binary_cross_entropy_with_logits(outputs.logits_downbeat, batch['widen_true_downbeat'], reduction='none')
+        loss_section = F.binary_cross_entropy_with_logits(outputs.logits_section, batch['widen_true_section'], reduction='none')
+        loss_function = F.cross_entropy(outputs.logits_function, batch['true_function'], reduction='none')
 
-  def compute_losses(self, outputs: AllInOneOutput, batch: Dict, prefix: str = None):
-    loss = 0.0
-    losses = {}
+        loss_beat = torch.mean(batch['mask'] * loss_beat)
+        loss_downbeat = torch.mean(batch['mask'] * loss_downbeat)
+        loss_section = torch.mean(batch['mask'] * loss_section)
+        loss_function = torch.mean(batch['mask'] * loss_function)
 
-    loss_beat = F.binary_cross_entropy_with_logits(
-      outputs.logits_beat, batch['widen_true_beat'],
-      reduction='none',
-    )
-    loss_downbeat = F.binary_cross_entropy_with_logits(
-      outputs.logits_downbeat, batch['widen_true_downbeat'],
-      reduction='none',
-    )
-    loss_section = F.binary_cross_entropy_with_logits(
-      outputs.logits_section, batch['widen_true_section'],
-      reduction='none',
-    )
-    loss_function = F.cross_entropy(
-      outputs.logits_function, batch['true_function'],
-      reduction='none',
-    )
+        loss_beat *= self.cfg.loss_weight_beat
+        loss_downbeat *= self.cfg.loss_weight_downbeat
+        loss_section *= self.cfg.loss_weight_section
+        loss_function *= self.cfg.loss_weight_function
 
-    loss_beat = torch.mean(batch['mask'] * loss_beat)
-    loss_downbeat = torch.mean(batch['mask'] * loss_downbeat)
-    loss_section = torch.mean(batch['mask'] * loss_section)
-    loss_function = torch.mean(batch['mask'] * loss_function)
+        if self.cfg.learn_rhythm:
+            loss += loss_beat + loss_downbeat
+        if self.cfg.learn_structure:
+            if self.cfg.learn_label:
+                loss += loss_function
+            if self.cfg.learn_segment:
+                loss += loss_section
 
-    loss_beat *= self.cfg.loss_weight_beat
-    loss_downbeat *= self.cfg.loss_weight_downbeat
-    loss_section *= self.cfg.loss_weight_section
-    loss_function *= self.cfg.loss_weight_function
+        losses.update(
+            loss=loss,
+            loss_beat=loss_beat,
+            loss_downbeat=loss_downbeat,
+            loss_section=loss_section,
+            loss_function=loss_function,
+        )
+        if prefix:
+            losses = prefix_dict(losses, prefix)
+        return losses
 
-    if self.cfg.learn_rhythm:
-      loss += loss_beat + loss_downbeat
-    if self.cfg.learn_structure:
-      if self.cfg.learn_label:
-        loss += loss_function
-      if self.cfg.learn_segment:
-        loss += loss_section
+    def on_fit_end(self):
+        print('=> Fit ended.')
+        if self.trainer.is_global_zero and self.trainer.checkpoint_callback.best_model_path:
+            print('=> Loading best model...')
+            model = AllInOneTrainer.load_from_checkpoint(self.trainer.checkpoint_callback.best_model_path, cfg=self.cfg)
+            print('=> Loaded best model.')
 
-    losses.update(
-      loss=loss,
-      loss_beat=loss_beat,
-      loss_downbeat=loss_downbeat,
-      loss_section=loss_section,
-      loss_function=loss_function,
-    )
-    if prefix:
-      losses = prefix_dict(losses, prefix)
-    return losses
 
-  def compute_predictions(self, outputs: AllInOneOutput, mask=None):
+def prefix_dict(d: Dict, prefix: str):
+    return {prefix + key: value for key, value in d.items()}
+
+
+def compute_predictions(self, outputs: AllInOneOutput, mask=None):
     raw_prob_beats = torch.sigmoid(outputs.logits_beat.detach())
     raw_prob_downbeats = torch.sigmoid(outputs.logits_downbeat.detach())
     raw_prob_sections = torch.sigmoid(outputs.logits_section.detach())
