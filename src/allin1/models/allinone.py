@@ -73,6 +73,33 @@ class AllInOne(nn.Module):
     )
 
 
+class AllInOneFinetune(AllInOne):
+    def __init__(self, cfg: Config, num_finetune_classes: int):
+        """
+        Subclass of AllInOne to allow finetuning with a custom number of output classes.
+        Args:
+            cfg (Config): Configuration for the model.
+            num_finetune_classes (int): Number of classes for finetuning.
+        """
+        super().__init__(cfg)
+
+        num_input_features = self.function_classifier.classifier.in_features
+        self.function_classifier.classifier = nn.Linear(num_input_features, num_finetune_classes)
+
+    def load_pretrained_weights(self, state_dict: dict, strict: bool = False):
+        """
+        Load pretrained weights, excluding the classification head.
+        Args:
+            state_dict (dict): The state dictionary containing the pretrained weights.
+            strict (bool): Whether to enforce strict loading of weights.
+        """
+        # Exclude the function_classifier weights from the state_dict
+        filtered_state_dict = {
+            k: v for k, v in state_dict.items() if "function_classifier.classifier" not in k
+        }
+        self.load_state_dict(filtered_state_dict, strict=strict)
+
+
 class AllInOneEncoder(nn.Module):
   def __init__(self, cfg: Config, depth: int):
     super().__init__()
