@@ -26,6 +26,8 @@ warnings.filterwarnings('ignore', category=UserWarning, message='The epoch param
 warnings.filterwarnings('ignore', category=UserWarning, message='No annotated tempo strengths given')
 
 
+from ..models import AllInOne, load_pretrained_model
+
 class AllInOneTrainer(LightningModule):
     scheduler: Scheduler
 
@@ -33,39 +35,32 @@ class AllInOneTrainer(LightningModule):
         super().__init__()
         self.cfg = cfg
 
-        # Initialize the model
+        # Initialize model
         if cfg.model == 'allinone':
             self.model = AllInOne(cfg)
         else:
             raise NotImplementedError(f'Unknown model: {cfg.model}')
 
-        # Load pretrained weights if specified
+        # Load pretrained weights
         if pretrained_model_name:
             print(f"=> Loading pretrained weights for {pretrained_model_name}")
             pretrained_model = load_pretrained_model(
                 model_name=pretrained_model_name,
                 cache_dir=cache_dir,
-                device=self.device if hasattr(self, 'device') else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                device=self.device,
             )
-
-            # Remove classifier weights from the state dict to avoid mismatch
+    
             pretrained_state_dict = pretrained_model.state_dict()
-            pretrained_state_dict = {
-                key: value for key, value in pretrained_state_dict.items()
-                if "function_classifier.classifier" not in key
+            new_state_dict = {
+                k: v for k, v in pretrained_state_dict.items()
+                if not k.startswith('function_classifier.classifier')
             }
 
-            # Load the filtered state dict
-            self.model.load_state_dict(pretrained_state_dict, strict=False)
-            print(f"=> Pretrained weights for {pretrained_model_name} loaded, classifier head excluded.")
-
-        # Update the number of labels for the classification head (e.g., 4 for your task)
-        self.model.function_classifier.classifier = torch.nn.Linear(
-            self.model.function_classifier.classifier.in_features, 4
-        )
-        print(f"=> Updated classification head to output 4 labels.")
-
+            self.model.load_state_dict(new_state_dict, strict=False)
+            print(f"=> Pretrained weights for {pretrained_model_name} loaded.")
+        
         self.lr = cfg.lr
+
 
 
     def forward(self, x):
