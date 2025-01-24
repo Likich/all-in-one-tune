@@ -1,5 +1,6 @@
 import hydra
 import lightning
+import torch
 from lightning import Trainer
 from lightning.pytorch.callbacks import StochasticWeightAveraging, ModelCheckpoint, LearningRateMonitor, EarlyStopping
 from lightning.pytorch.loggers import WandbLogger
