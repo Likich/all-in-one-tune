@@ -28,7 +28,7 @@ def main(cfg: Config):
     print("=> Initializing model...")
     # Initialize model with pretrained weights from harmonix-fold0
     pretrained_model = load_pretrained_model(
-        model_name="harmonix-fold0",  # Specify the harmonix-fold0 pretrained model
+        model_name="harmonix-fold2",  # Specify the harmonix-fold0 pretrained model
         device="cuda" if torch.cuda.is_available() else "cpu",
     )
 
