@@ -44,7 +44,8 @@ def analyze(
     """
     # Configuration for the fine-tuned model
     cfg = Config()
-    cfg.data.num_labels = 4  # Ensure model outputs 4 labels
+    print(cfg)
+    # cfg.data.num_labels = 4  # Ensure model outputs 4 labels
 
     # Load the model
     if checkpoint_path:
