@@ -47,10 +47,26 @@ class AllInOneTrainer(LightningModule):
                 cache_dir=cache_dir,
                 device=self.device if hasattr(self, 'device') else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             )
-            self.model.load_state_dict(pretrained_model.state_dict(), strict=False)
-            print(f"=> Pretrained weights for {pretrained_model_name} loaded.")
+
+            # Remove classifier weights from the state dict to avoid mismatch
+            pretrained_state_dict = pretrained_model.state_dict()
+            pretrained_state_dict = {
+                key: value for key, value in pretrained_state_dict.items()
+                if "function_classifier.classifier" not in key
+            }
+
+            # Load the filtered state dict
+            self.model.load_state_dict(pretrained_state_dict, strict=False)
+            print(f"=> Pretrained weights for {pretrained_model_name} loaded, classifier head excluded.")
+
+        # Update the number of labels for the classification head (e.g., 4 for your task)
+        self.model.function_classifier.classifier = torch.nn.Linear(
+            self.model.function_classifier.classifier.in_features, 4
+        )
+        print(f"=> Updated classification head to output 4 labels.")
 
         self.lr = cfg.lr
+
 
     def forward(self, x):
         return self.model(x)
