@@ -13,85 +13,77 @@ from ..config import Config
 
 @hydra.main(version_base=None, config_name='config')
 def main(cfg: Config):
-  makeup_config(cfg)
+    makeup_config(cfg)
 
-  # Setting all the random seeds to the same value.
-  # This is important in a distributed training setting.
-  # Each rank will get its own set of initial weights.
-  # If they don't match up, the gradients will not match either,
-  # leading to training that may not converge.
-  lightning.seed_everything(cfg.seed)
+    lightning.seed_everything(cfg.seed)
 
-  if cfg.data.name == 'files':
-    dm = HarmonixDataModule(cfg)
-  else:
-    raise ValueError(f'Unknown dataset: {cfg.data.name}')
+    if cfg.data.name == 'files':
+        dm = HarmonixDataModule(cfg)
+    else:
+        raise ValueError(f'Unknown dataset: {cfg.data.name}')
 
-  model = AllInOneTrainer(cfg)
+    # Specify the pretrained model name if provided
+    pretrained_model_name = cfg.pretrained_model_name if hasattr(cfg, 'pretrained_model_name') else None
 
-  wandb_logger = WandbLogger(
-    project='models',
-    tags=[
-           f'fold{cfg.fold}'
-         ] + (
-           [cfg.case] if cfg.case else []
-         ),
-    log_model=False if cfg.debug or cfg.sanity_check or cfg.offline else 'all',
-    offline=cfg.debug or cfg.sanity_check or cfg.offline,
-  )
-  wandb_logger.log_hyperparams(cfg)
-  wandb_logger.experiment.define_metric('val/loss', summary='min')
-
-  callbacks = [
-    ModelCheckpoint(monitor='val/loss', mode='min'),
-    EarlyStopping(
-      monitor='val/loss',
-      mode='min',
-      patience=cfg.early_stopping_patience,
-      min_delta=1e-4,
-      log_rank_zero_only=True,
-      verbose=True
-    ),
-    LearningRateMonitor(),
-  ]
-  if cfg.swa_lr > 1e-4:
-    callbacks.append(StochasticWeightAveraging(swa_lrs=cfg.swa_lr))
-
-  trainer = Trainer(
-    accelerator='cpu' if cfg.debug else 'auto',
-    # For some reason, ddp stucks at evaluation...
-    # devices=1 if cfg.sanity_check or cfg.debug else 'auto',
-    devices=1,
-    gradient_clip_val=cfg.gradient_clip,
-    logger=wandb_logger,
-    callbacks=None if cfg.sanity_check else callbacks,
-    check_val_every_n_epoch=cfg.validation_interval_epochs,
-    max_epochs=cfg.max_epochs,
-    fast_dev_run=cfg.debug and not cfg.sanity_check,
-    overfit_batches=cfg.sanity_check_size if cfg.sanity_check else 0,
-  )
-  if cfg.sanity_check:
-    trainer.limit_val_batches = 0
-
-  if trainer.is_global_zero:
-    print('=' * 80)
-    print('Config')
-    print('=' * 80)
-    print(OmegaConf.to_yaml(cfg))
-    print('=' * 80)
-
-  trainer.fit(
-    model=model,
-    datamodule=dm,
-  )
-  print(f'=> Finished training.')
-
-  if trainer.is_global_zero:
-    print('=> Running evaluation...')
-    evaluate(
-      model=model,
-      trainer=trainer,
+    model = AllInOneTrainer(
+        cfg=cfg,
+        pretrained_model_name=pretrained_model_name,
+        cache_dir=cfg.cache_dir if hasattr(cfg, 'cache_dir') else None,
     )
+
+    wandb_logger = WandbLogger(
+        project='models',
+        tags=[
+               f'fold{cfg.fold}'
+             ] + (
+               [cfg.case] if cfg.case else []
+             ),
+        log_model=False if cfg.debug or cfg.sanity_check or cfg.offline else 'all',
+        offline=cfg.debug or cfg.sanity_check or cfg.offline,
+    )
+    wandb_logger.log_hyperparams(cfg)
+    wandb_logger.experiment.define_metric('val/loss', summary='min')
+
+    callbacks = [
+        ModelCheckpoint(monitor='val/loss', mode='min'),
+        EarlyStopping(
+            monitor='val/loss',
+            mode='min',
+            patience=cfg.early_stopping_patience,
+            min_delta=1e-4,
+            log_rank_zero_only=True,
+            verbose=True
+        ),
+        LearningRateMonitor(),
+    ]
+    if cfg.swa_lr > 1e-4:
+        callbacks.append(StochasticWeightAveraging(swa_lrs=cfg.swa_lr))
+
+    trainer = Trainer(
+        accelerator='cpu' if cfg.debug else 'auto',
+        devices=1,
+        gradient_clip_val=cfg.gradient_clip,
+        logger=wandb_logger,
+        callbacks=None if cfg.sanity_check else callbacks,
+        check_val_every_n_epoch=cfg.validation_interval_epochs,
+        max_epochs=cfg.max_epochs,
+        fast_dev_run=cfg.debug and not cfg.sanity_check,
+        overfit_batches=cfg.sanity_check_size if cfg.sanity_check else 0,
+    )
+
+    trainer.fit(
+        model=model,
+        datamodule=dm,
+    )
+    print(f'=> Finished training.')
+
+    if trainer.is_global_zero:
+        print('=> Running evaluation...')
+        evaluate(
+            model=model,
+            trainer=trainer,
+        )
+
 
 
 def makeup_config(cfg: Config):
