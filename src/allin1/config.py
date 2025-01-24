@@ -19,7 +19,7 @@ class DataConfig:
 
   demixed: bool
   num_instruments: int
-  num_labels: 4
+  num_labels: int
 
   path_base_dir: str
   path_track_dir: str
