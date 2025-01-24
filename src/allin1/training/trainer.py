@@ -27,8 +27,7 @@ warnings.filterwarnings('ignore', category=UserWarning, message='no annotated te
 
 class AllInOneTrainer(LightningModule):
     scheduler: Scheduler
-
-    def __init__(self, cfg: Config, pretrained_model_name: Optional[str] = None, cache_dir: Optional[str] = None):
+  def __init__(self, cfg: Config, pretrained_model_name: Optional[str] = None, cache_dir: Optional[str] = None):
         super().__init__()
         self.cfg = cfg
 
