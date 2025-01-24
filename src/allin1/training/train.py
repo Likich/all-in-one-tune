@@ -27,7 +27,7 @@ def main(cfg: Config):
   else:
     raise ValueError(f'Unknown dataset: {cfg.data.name}')
 
-  model = AllInOneTrainer(cfg)
+  model = AllInOneTrainer(cfg, pretrained_model_name = 'harmonix-fold2')
 
   wandb_logger = WandbLogger(
     project='models',
