@@ -16,7 +16,6 @@ from .helpers import (
 )
 from .utils import mkpath, load_result
 from .typings import AnalysisResult, PathLike
-from ..models.allinone import AllInOne
 
 
 def analyze(
