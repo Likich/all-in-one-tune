@@ -102,7 +102,7 @@ def load_pretrained_model(
     cache_dir: Optional[PathLike] = None,
     device=None,
     checkpoint_dir: Optional[PathLike] = None,
-    checkpoint_path: Optional[str] = None,  # Allow direct checkpoint path
+    checkpoint_path: Optional[str] = None,
     num_finetune_classes: int = None,  # Number of output classes for finetuning
 ):
     if model_name in ENSEMBLE_MODELS:
@@ -141,6 +141,7 @@ def load_pretrained_model(
     else:
         raise ValueError("Checkpoint does not contain a 'state_dict' key.")
 
+    # Retrieve configuration
     filename = NAME_TO_FILE[model_name]
     checkpoint_path_original = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
 
@@ -151,11 +152,18 @@ def load_pretrained_model(
     # Update the number of labels for finetuning if specified
     if num_finetune_classes is not None:
         config.data.num_labels = num_finetune_classes
-        model = AllInOneFinetune(config, num_finetune_classes).to(device)
-    else:
-        model = AllInOne(config).to(device)
+        print('cfg', config.data.num_labels)
 
-    # Adjust and load state_dict
+    model = AllInOne(config).to(device)
+
+    # Adjust the classifier to match the checkpoint's output shape
+    num_input_features = model.function_classifier.classifier.in_features
+    num_output_features = state_dict["function_classifier.classifier.weight"].size(0)
+    model.function_classifier.classifier = nn.Linear(num_input_features, num_output_features)
+
+    print(f"Adjusted classifier to output {num_output_features} classes.")
+
+    # Load state_dict
     adjusted_state_dict = {
         key.replace("model.", ""): value for key, value in checkpoint["state_dict"].items()
     }
