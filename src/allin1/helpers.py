@@ -14,6 +14,9 @@ from .postprocessing import (
   estimate_tempo_from_beats,
 )
 
+torch.set_printoptions(threshold=100000, edgeitems=10, linewidth=200)
+
+
 
 def run_inference(
     path: Path,
