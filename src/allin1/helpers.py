@@ -43,14 +43,8 @@ def run_inference(
     print("logits_function:", logits.logits_function)
     # Convert logits_function to CPU and numpy array
     logits_function = logits.logits_function.cpu().numpy()
-    
-    # Option 1: Save as multiple 2D arrays (one per batch)
-    for i, frame_logits in enumerate(logits_function):
-        np.savetxt(f"logits_function_frame_{i}.txt", frame_logits, fmt="%.4f")
-    
-    # Option 2: Flatten and save as a single 2D array
-    logits_function_reshaped = logits_function.reshape(-1, logits_function.shape[-1])  # Combine batch and frames
-    np.savetxt("logits_function_reshaped.txt", logits_function_reshaped, fmt="%.4f")
+
+    np.savetxt("logits_function.txt", str(logits.logits_function))
 
 
     
