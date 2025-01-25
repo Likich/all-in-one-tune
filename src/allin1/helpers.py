@@ -41,6 +41,9 @@ def run_inference(
     print("logits_downbeat:", logits.logits_downbeat)
     print("logits_section:", logits.logits_section)
     print("logits_function:", logits.logits_function)
+    np.savetxt("logits_function.txt", logits.logits_function.cpu().numpy(), fmt="%.4f")
+    np.savetxt("logits_section.txt", logits.logits_section.cpu().numpy(), fmt="%.4f")
+
     
     metrical_structure = postprocess_metrical_structure(logits, model.cfg)
     functional_structure = postprocess_functional_structure(logits, model.cfg)
