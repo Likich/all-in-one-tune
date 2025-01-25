@@ -144,28 +144,24 @@ def load_pretrained_model(
     # Retrieve configuration
     filename = NAME_TO_FILE[model_name]
     checkpoint_path_original = hf_hub_download(repo_id='taejunkim/allinone', filename=filename, cache_dir=cache_dir)
-
     checkpoint_config = torch.load(checkpoint_path_original, map_location=device)
+    print('original checkpoint is', checkpoint_path_original)
     config = OmegaConf.create(checkpoint_config['config'])
-    print('config', checkpoint_config['config'])
+    print('config original', checkpoint_config['config'])
+    checkpoint_new = torch.load(checkpoint_path)
+    print('new checkpoint is', checkpoint_path)
 
-    # Update the number of labels for finetuning if specified
-    if num_finetune_classes is not None:
-        config.data.num_labels = num_finetune_classes
-        print('cfg', config.data.num_labels)
-
+    config.data.num_labels = 4
     model = AllInOne(config).to(device)
 
-    # Adjust the classifier to match the checkpoint's output shape
-    num_input_features = model.function_classifier.classifier.in_features
-    num_output_features = state_dict["function_classifier.classifier.weight"].size(0)
-    model.function_classifier.classifier = nn.Linear(num_input_features, num_output_features)
-
-    print(f"Adjusted classifier to output {num_output_features} classes.")
+    # # Adjust the classifier to match the checkpoint's output shape
+    # num_input_features = model.function_classifier.classifier.in_features
+    # num_output_features = state_dict["function_classifier.classifier.weight"].size(0)
+    # model.function_classifier.classifier = nn.Linear(num_input_features, num_output_features)
 
     # Load state_dict
     adjusted_state_dict = {
-        key.replace("model.", ""): value for key, value in checkpoint["state_dict"].items()
+        key.replace("model.", ""): value for key, value in checkpoint_new["state_dict"].items()
     }
     model.load_state_dict(adjusted_state_dict, strict=False)
 
