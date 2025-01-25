@@ -31,9 +31,21 @@ def run_inference(
         raise TypeError(f"Model is not callable. Type: {type(model)}")
 
     logits = model(spec)
-
+    
+    # Print logits for debugging
+    print("Logits (raw outputs from the model):")
+    print("logits_beat:", logits.logits_beat)
+    print("logits_downbeat:", logits.logits_downbeat)
+    print("logits_section:", logits.logits_section)
+    print("logits_function:", logits.logits_function)
+    
     metrical_structure = postprocess_metrical_structure(logits, model.cfg)
     functional_structure = postprocess_functional_structure(logits, model.cfg)
+      
+    # Print predictions (after postprocessing)
+    print("Predictions after postprocessing:")
+    print("Metrical structure:", metrical_structure)
+    print("Functional structure:", functional_structure)
     bpm = estimate_tempo_from_beats(metrical_structure['beats'])
 
     result = AnalysisResult(
