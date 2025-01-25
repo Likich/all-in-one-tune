@@ -154,16 +154,11 @@ def load_pretrained_model(
     config.data.num_labels = 4
     model = AllInOne(config).to(device)
 
-    # # Adjust the classifier to match the checkpoint's output shape
-    # num_input_features = model.function_classifier.classifier.in_features
-    # num_output_features = state_dict["function_classifier.classifier.weight"].size(0)
-    # model.function_classifier.classifier = nn.Linear(num_input_features, num_output_features)
-
     # Load state_dict
     adjusted_state_dict = {
         key.replace("model.", ""): value for key, value in checkpoint_new["state_dict"].items()
     }
-    model.load_state_dict(adjusted_state_dict, strict=False)
+    model.load_state_dict(adjusted_state_dict, strict=True)
 
     model.eval()
     return model
