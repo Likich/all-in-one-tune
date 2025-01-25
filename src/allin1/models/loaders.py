@@ -159,7 +159,8 @@ def load_pretrained_model(
         key.replace("model.", ""): value for key, value in checkpoint_new["state_dict"].items()
     }
     model.load_state_dict(adjusted_state_dict, strict=True)
-
+    print(model.function_classifier.classifier.weight)
+    print(model.function_classifier.classifier.bias)
     model.eval()
     return model
 
