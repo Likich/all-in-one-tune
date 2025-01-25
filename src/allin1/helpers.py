@@ -42,9 +42,9 @@ def run_inference(
     print("logits_section:", logits.logits_section)
     print("logits_function:", logits.logits_function)
     # Convert logits_function to CPU and numpy array
-    logits_function = logits.logits_function.cpu().numpy()
+    # logits_function = logits.logits_function.cpu().numpy()
 
-    np.savetxt("logits_function.txt", str(logits.logits_function))
+    # np.savetxt("logits_function.txt", str(logits.logits_function))
 
 
     
