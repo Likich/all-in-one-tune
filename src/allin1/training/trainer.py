@@ -13,6 +13,8 @@ from sklearn.metrics import f1_score, accuracy_score
 from timm.optim.optim_factory import create_optimizer_v2 as create_optimizer
 from timm.scheduler import create_scheduler
 from timm.scheduler.scheduler import Scheduler
+from lightning.pytorch.loggers import WandbLogger
+
 
 from ..models import AllInOne, load_pretrained_model
 from ..typings import AllInOneOutput, AllInOnePrediction
@@ -34,6 +36,8 @@ class AllInOneTrainer(LightningModule):
     def __init__(self, cfg: Config, pretrained_model_name: Optional[str] = None, cache_dir: Optional[str] = None):
         super().__init__()
         self.cfg = cfg
+        from lightning.pytorch.loggers import WandbLogger
+
 
         # Initialize model
         if cfg.model == 'allinone':
