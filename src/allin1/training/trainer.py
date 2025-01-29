@@ -26,7 +26,7 @@ warnings.filterwarnings('ignore', category=UserWarning, message='The epoch param
 warnings.filterwarnings('ignore', category=UserWarning, message='No annotated tempo strengths given')
 
 
-from ..models import AllInOne, load_pretrained_model
+from ..models import AllInOne, load_pretrained_model_train
 
 class AllInOneTrainer(LightningModule):
     scheduler: Scheduler
@@ -44,7 +44,7 @@ class AllInOneTrainer(LightningModule):
         # Load pretrained weights
         if pretrained_model_name:
             print(f"=> Loading pretrained weights for {pretrained_model_name}")
-            pretrained_model = load_pretrained_model(
+            pretrained_model = load_pretrained_model_train(
                 model_name=pretrained_model_name,
                 cache_dir=cache_dir,
                 device=self.device,
