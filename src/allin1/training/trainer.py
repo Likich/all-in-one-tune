@@ -78,18 +78,43 @@ class AllInOneTrainer(LightningModule):
 
         return {'optimizer': optimizer}
 
-    def on_train_epoch_end(self) -> None:
+    def on_train_epoch_end(self):
         if self.cfg.sanity_check:
             return
-
+    
+        # Run inference on a validation batch
+        val_loader = self.trainer.datamodule.val_dataloader()
+        batch = next(iter(val_loader))  # Take the first batch
+        batch_size = batch['spec'].shape[0]
+        
+        with torch.no_grad():
+            outputs: AllInOneOutput = self(batch['spec'].to(self.device))
+            predictions = self.compute_predictions(outputs)
+    
+        # Print the predictions (or log them)
+        print(f"\n==== Epoch {self.current_epoch + 1} Predictions ====")
+        print(f"Predicted Functions: {predictions.pred_functions}")  # Label predictions
+        print(f"Predicted Beats: {predictions.pred_beat_times}")    # Beat predictions
+        print(f"Predicted Downbeats: {predictions.pred_downbeat_times}")  # Downbeat predictions
+        print(f"Predicted Sections: {predictions.pred_section_times}")  # Section predictions
+        print("=" * 50)
+    
+        # Optionally log predictions to Wandb
+        if isinstance(self.logger, WandbLogger):
+            self.logger.log_metrics({
+                "train/pred_function_example": predictions.pred_functions[0],  # Log first example
+                "train/pred_beat_example": len(predictions.pred_beat_times[0]),  # Log beats count
+            }, step=self.current_epoch + 1)
+    
+        # Learning rate decay handling
         if self.cfg.sched == 'plateau':
             if (self.current_epoch + 1) % self.cfg.validation_interval_epochs == 0:
                 optimizer = self.trainer.optimizers[0]
                 old_lr = optimizer.param_groups[0]['lr']
-
+    
                 metric = self.trainer.callback_metrics[self.cfg.eval_metric]
                 self.scheduler.step(epoch=self.current_epoch + 1, metric=metric)
-
+    
                 new_lr = optimizer.param_groups[0]['lr']
                 if new_lr < old_lr:
                     print(f'=> The LR is decayed from {old_lr} to {new_lr}. '
@@ -99,6 +124,7 @@ class AllInOneTrainer(LightningModule):
                 self.scheduler.step(epoch=self.current_epoch + 1)
         else:
             self.scheduler.step(epoch=self.current_epoch + 1)
+
 
     def training_step(self, batch, batch_idx):
         batch_size = batch['spec'].shape[0]
