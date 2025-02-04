@@ -8,8 +8,8 @@ from omegaconf import MISSING
 HARMONIX_LABELS = [
   'start',
   'end',
-  'song_end',
-  'song_start'
+  'out',
+  'in'
 ]
 
 
