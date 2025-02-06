@@ -194,6 +194,9 @@ def compute_postprocessed_scores_step(
     trim=False
   )
   scores_functional = {f'segment/{k}': v for k, v in scores_functional.items()}
+  pred_labels = [HARMONIX_LABELS.index(s.label) for s in pred_functional]
+  print(f"Predicted labels: {pred_labels}")  # Debug print
+
 
   scores = {**scores_functional, **scores_metrical}
 
