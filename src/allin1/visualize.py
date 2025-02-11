@@ -15,14 +15,14 @@ from .utils import mkpath
 HARMONIX_COLORS = {
   'start': 'black',
   'end': 'black',
-  'intro': 1,
-  'outro': 1,
-  'break': 2,
-  'bridge': 2,
-  'inst': 3,
-  'solo': 3,
-  'verse': 4,
-  'chorus': 5,
+  'in': 1,
+  'out': 2
+  # 'break': 2,
+  # 'bridge': 2,
+  # 'inst': 3,
+  # 'solo': 3,
+  # 'verse': 4,
+  # 'chorus': 5,
 }
 
 
